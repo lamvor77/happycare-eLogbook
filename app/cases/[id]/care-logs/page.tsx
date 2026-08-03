@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import type { CareLog, Hospital } from "@/types/domain";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
@@ -70,13 +71,13 @@ export default async function CaseCareLogsPage({
           <div className="mt-3 space-y-1 text-sm text-gray-600">
             <p>환자명: {caseData.patient_name || "-"}</p>
             <p>사례번호: {caseData.case_no || "-"}</p>
-            <p>병원: {(caseData.hospitals as any)?.hospital_name || "-"}</p>
+            <p>병원: {(caseData.hospitals as unknown as Pick<Hospital, "hospital_name"> | null)?.hospital_name || "-"}</p>
             <p>입원호실: {caseData.room_no || "-"}</p>
           </div>
         </div>
 
         {logs && logs.length > 0 ? (
-          logs.map((log: any) => {
+          logs.map((log: CareLog) => {
             const locationChecked =
               log.location_status === "checked";
 

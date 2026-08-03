@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { getCurrentCaregiverStatus } from "@/lib/caregiver-auth";
 import CareLogClient from "./CareLogClient";
+import type { CaseCaregiver } from "@/types/domain";
 
 export default async function CaseCareLogPage({
   params,
@@ -29,7 +30,7 @@ export default async function CaseCareLogPage({
   }
 
   const currentCaregiver = caseData.case_caregivers?.find(
-    (item: any) => item.is_current_caregiver
+    (item: CaseCaregiver) => item.is_current_caregiver
   );
 
   if (!currentCaregiver) {

@@ -2,6 +2,31 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { makeCaseNo } from "@/lib/case-no";
 
+interface GoogleFormSyncBody {
+  registration_no?: string;
+  family_code?: string;
+  case_no?: string;
+  patient_name?: string;
+  patient_birth_date?: string;
+  patient_phone?: string;
+  patient_gender?: string;
+  diagnosis_name?: string;
+  room_no?: string;
+  insurance_company?: string;
+  accident_type?: string;
+  accident_type_etc?: string;
+  planner_name?: string;
+  planner_phone?: string;
+  care_start_date?: string;
+  care_end_date?: string;
+  memo?: string;
+  status?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function POST(request: Request) {
   const serverSecret = process.env.GOOGLE_FORM_SYNC_SECRET;
 
@@ -28,8 +53,8 @@ export async function POST(request: Request) {
   let supabase;
   try {
     supabase = createSupabaseAdminClient();
-  } catch (error: any) {
-    console.error("supabase-admin 클라이언트 생성 실패:", error?.message);
+  } catch (error: unknown) {
+    console.error("supabase-admin 클라이언트 생성 실패:", getErrorMessage(error));
     return NextResponse.json(
       { error: "서버 설정 오류입니다." },
       { status: 500 }
@@ -37,7 +62,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body: GoogleFormSyncBody = await request.json();
 
     const registrationNo = body.registration_no;
 
@@ -106,8 +131,8 @@ export async function POST(request: Request) {
       case_no: data.case_no,
       family_code: data.family_code,
     });
-  } catch (error: any) {
-    console.error("google-form-sync 처리 중 오류:", error?.message);
+  } catch (error: unknown) {
+    console.error("google-form-sync 처리 중 오류:", getErrorMessage(error));
     return NextResponse.json(
       { error: "동기화 처리에 실패했습니다." },
       { status: 500 }

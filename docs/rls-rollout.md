@@ -34,8 +34,13 @@ API 경유 구조로 전환되었다. 5단계에서는 마이그레이션 순서
 - RLS 정책 파일에 명시적 REVOKE(정책이 없는 명령에 대한 이중 방어),
   `hospitals_admin_write`를 FOR ALL에서 쓰기 전용으로 축소, storage 정책
   주석 정정(사진 업로드는 현재 어떤 신규 코드 경로에서도 구현되어 있지
-  않음 — 레거시 `app/care-log/[id]/page.tsx`만 이 버킷을 쓰며, 그 페이지는
-  이미 삭제된 `patients` 테이블을 참조하는 죽은 코드다) 등을 반영했다.
+  않음 — 5단계 당시 이 버킷을 쓰던 레거시 `app/care-log/[id]/page.tsx`는
+  6단계에서 삭제됨, 아래 "6단계" 절 참고) 등을 반영했다.
+- **6단계**: 죽은 코드였던 `app/care-log/[id]/page.tsx`(삭제된
+  `patients` 테이블 참조), `app/care-logs/page.tsx`(전체 간병일지 무인증
+  노출), `app/invite/page.tsx`(구버전 안내 문구, `/case-join`으로 대체됨),
+  빈 `app/admin/app/` 디렉터리를 삭제했다. 모두 삭제 전 `href`/`import`/
+  `redirect`/`window.location.href` 참조가 없음을 확인했다.
 - 신규 파일: `supabase/migrations/checks/post_rls_verification.sql`,
   `supabase/migrations/rollback/20260803_rls_rollback.sql`,
   `scripts/rls-smoke-test.mjs`.

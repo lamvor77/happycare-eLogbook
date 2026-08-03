@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import type { CaseHistoryEntry } from "@/types/domain";
 
 export default function CaseHistory({ caseId }: { caseId: string }) {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<CaseHistoryEntry[]>([]);
 
   useEffect(() => {
     async function loadHistory() {

@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import RegenerateQrButton from "../RegenerateQrButton";
+import type { Hospital } from "@/types/domain";
 
 export default function HospitalQrClient({
   params,
@@ -10,7 +11,7 @@ export default function HospitalQrClient({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [hospital, setHospital] = useState<any>(null);
+  const [hospital, setHospital] = useState<Hospital | null>(null);
 
   useEffect(() => {
     async function loadHospital() {

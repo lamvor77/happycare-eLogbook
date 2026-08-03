@@ -1,7 +1,8 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import LogoutButton from "./LogoutButton";
+import type { CaseRecord, CareLog } from "@/types/domain";
 
-function getSourceLabel(sourceType?: string) {
+function getSourceLabel(sourceType?: string | null) {
   if (sourceType === "google_form") return "구글폼";
   if (sourceType === "hospital_qr") return "병원QR";
   return "-";
@@ -200,7 +201,7 @@ export default async function AdminPage() {
 
             <div className="space-y-3">
               {recentCases && recentCases.length > 0 ? (
-                recentCases.map((item: any) => (
+                recentCases.map((item: CaseRecord) => (
                   <div
                     key={item.case_id}
                     className="border rounded p-3"
@@ -258,7 +259,7 @@ export default async function AdminPage() {
 
             <div className="space-y-3">
               {recentLogs && recentLogs.length > 0 ? (
-                recentLogs.map((log: any) => {
+                recentLogs.map((log: CareLog) => {
                   const locationChecked =
                     log.location_status === "checked";
 

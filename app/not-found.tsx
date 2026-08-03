@@ -1,14 +1,13 @@
 import Link from "next/link";
 
-export default function AdminAccessDeniedPage() {
+export default function NotFound() {
   return (
     <main className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-lg shadow p-6 text-center">
-        <h1 className="text-2xl font-bold mb-3">접근 권한이 없습니다</h1>
+        <h1 className="text-2xl font-bold mb-3">페이지를 찾을 수 없습니다</h1>
 
         <p className="text-gray-600 mb-6">
-          로그인은 되었지만 이 계정은 관리자로 등록되어 있지 않습니다.
-          관리자 권한이 필요하면 시스템 관리자에게 문의해주세요.
+          요청하신 페이지가 존재하지 않거나 이동되었습니다.
         </p>
 
         <Link

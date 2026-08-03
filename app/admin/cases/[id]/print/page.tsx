@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import PrintButton from "./PrintButton";
+import type { CareLog } from "@/types/domain";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") {
@@ -183,7 +184,7 @@ export default async function AdminCasePrintPage({
 
             <tbody>
               {logs && logs.length > 0 ? (
-                logs.map((log: any) => {
+                logs.map((log: CareLog) => {
                   const locationChecked =
                     log.location_status === "checked";
 

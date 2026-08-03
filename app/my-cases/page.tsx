@@ -1,9 +1,24 @@
 import { requireCaregiverPage } from "@/lib/caregiver-auth";
 
+interface MyCaseLink {
+  case_caregiver_id: string;
+  relationship: string;
+  is_current_caregiver: boolean;
+  status: string;
+  cases?: {
+    case_id: string;
+    case_no: string | null;
+    patient_name: string;
+    room_no: string | null;
+    status: string;
+    hospitals?: { hospital_name: string } | null;
+  } | null;
+}
+
 export default async function MyCasesPage() {
   const { supabase, caregiver } = await requireCaregiverPage();
 
-  const { data: links } = await supabase
+  const { data: linksData } = await supabase
     .from("case_caregivers")
     .select(
       `
@@ -24,6 +39,11 @@ export default async function MyCasesPage() {
     .eq("caregiver_id", caregiver.caregiver_id)
     .eq("status", "활성");
 
+  // Supabase가 다대일 관계(cases)를 배열로 추론하지만 실제로는 단일
+  // 객체다(app/cases/[id]/care-logs/page.tsx의 hospitals 케이스와 동일한
+  // 이유). 최소 타입으로 명시적으로 재단언한다.
+  const links = linksData as unknown as MyCaseLink[] | null;
+
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto space-y-4">
@@ -35,7 +55,7 @@ export default async function MyCasesPage() {
         </div>
 
         {links && links.length > 0 ? (
-          links.map((link: any) => (
+          links.map((link: MyCaseLink) => (
             <a
               key={link.case_caregiver_id}
               href={`/cases/${link.cases?.case_id}`}

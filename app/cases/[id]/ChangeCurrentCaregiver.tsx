@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { CaseCaregiver } from "@/types/domain";
 
 export default function ChangeCurrentCaregiver({
   caseId,
@@ -8,7 +9,7 @@ export default function ChangeCurrentCaregiver({
   canChange,
 }: {
   caseId: string;
-  caregivers: any[];
+  caregivers: CaseCaregiver[];
   canChange: boolean;
 }) {
   const [selectedId, setSelectedId] = useState("");

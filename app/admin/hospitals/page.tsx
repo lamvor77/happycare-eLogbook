@@ -1,4 +1,13 @@
 import { requireAdmin } from "@/lib/admin-auth";
+import type { Hospital } from "@/types/domain";
+
+interface HospitalWithCases extends Hospital {
+  cases?: {
+    case_id: string;
+    status: string;
+    care_logs?: { care_date: string }[];
+  }[];
+}
 
 export default async function AdminHospitalsPage() {
   const { supabase } = await requireAdmin();
@@ -38,18 +47,18 @@ export default async function AdminHospitalsPage() {
         </div>
 
         <div className="space-y-4">
-          {hospitals?.map((hospital: any) => {
+          {hospitals?.map((hospital: HospitalWithCases) => {
             const cases = hospital.cases || [];
             const activeCases = cases.filter(
-              (item: any) => item.status === "입원중"
+              (item) => item.status === "입원중"
             );
 
             const endedCases = cases.filter(
-              (item: any) => item.status === "간병종료"
+              (item) => item.status === "간병종료"
             );
 
-            const todayWritten = activeCases.filter((item: any) =>
-              item.care_logs?.some((log: any) => log.care_date === today)
+            const todayWritten = activeCases.filter((item) =>
+              item.care_logs?.some((log) => log.care_date === today)
             );
 
             const todayMissingCount =

@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin-auth";
+import type { CareLog } from "@/types/domain";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") {
@@ -80,7 +81,7 @@ export default async function LocationUnavailablePage() {
 
         <div className="space-y-4">
           {logs && logs.length > 0 ? (
-            logs.map((log: any) => (
+            logs.map((log: CareLog) => (
               <div
                 key={log.log_id}
                 className="rounded-lg border bg-white p-5 shadow-sm"

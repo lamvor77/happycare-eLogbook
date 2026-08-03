@@ -106,6 +106,11 @@ export default function CareLogClient({
   }, []);
 
   useEffect(() => {
+    // 마운트 시 위치 확인을 자동으로 시도한다(요구사항: 간병일지 작성 화면
+    // 진입 시 위치 확인 자동 실행). checkLocation의 setState 호출은 모두
+    // navigator.geolocation의 비동기 콜백 안에서 일어나므로 이 규칙이
+    // 우려하는 "effect 본문에서의 동기 setState"에 해당하지 않는다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkLocation();
   }, [checkLocation]);
 
@@ -196,13 +201,15 @@ export default function CareLogClient({
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-4">간병활동</h2>
 
-          {[
-            ["식사보조", mealAssist, setMealAssist],
-            ["이동보조", moveAssist, setMoveAssist],
-            ["배설보조", toiletAssist, setToiletAssist],
-            ["위생관리", hygieneAssist, setHygieneAssist],
-            ["체위변경", positionChange, setPositionChange],
-          ].map(([label, checked, setter]: any) => (
+          {(
+            [
+              ["식사보조", mealAssist, setMealAssist],
+              ["이동보조", moveAssist, setMoveAssist],
+              ["배설보조", toiletAssist, setToiletAssist],
+              ["위생관리", hygieneAssist, setHygieneAssist],
+              ["체위변경", positionChange, setPositionChange],
+            ] as [string, boolean, (value: boolean) => void][]
+          ).map(([label, checked, setter]) => (
             <label
               key={label}
               className="flex items-center justify-between border rounded p-3 mb-2"

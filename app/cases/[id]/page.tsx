@@ -3,6 +3,7 @@ import { getCurrentCaregiverStatus } from "@/lib/caregiver-auth";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
+import type { CaseCaregiver, CareLog } from "@/types/domain";
 
 export default async function CaseDetailPage({
   params,
@@ -46,7 +47,7 @@ export default async function CaseDetailPage({
   }
 
   const currentCaregiver = caseData.case_caregivers?.find(
-    (item: any) => item.is_current_caregiver
+    (item: CaseCaregiver) => item.is_current_caregiver
   );
 
   const caregiverStatus = await getCurrentCaregiverStatus(id);
@@ -119,7 +120,7 @@ export default async function CaseDetailPage({
           <h2 className="font-bold mb-3">가족간병인 목록</h2>
 
           <div className="space-y-3">
-            {caseData.case_caregivers?.map((item: any) => (
+            {caseData.case_caregivers?.map((item: CaseCaregiver) => (
               <div
                 key={item.case_caregiver_id}
                 className="border rounded p-3 text-sm"
@@ -146,7 +147,7 @@ export default async function CaseDetailPage({
           <h2 className="font-bold mb-3">최근 간병일지</h2>
 
           <div className="space-y-3 text-sm">
-            {careLogs?.slice(0, 3).map((log: any) => (
+            {careLogs?.slice(0, 3).map((log: CareLog) => (
               <div key={log.log_id} className="border rounded p-3">
                 <p className="font-bold">{log.care_date}</p>
                 <p>작성자: {log.writer_name || log.signature_name || "-"}</p>

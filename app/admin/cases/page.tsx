@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/admin-auth";
+import type { CaseRecord } from "@/types/domain";
 
-function getSourceLabel(sourceType?: string) {
+function getSourceLabel(sourceType?: string | null) {
   if (sourceType === "google_form") return "구글폼";
   if (sourceType === "hospital_qr") return "병원QR";
   return "-";
@@ -78,7 +79,7 @@ export default async function AdminCasesPage({
           </a>
         </div>
 
-        {cases?.map((item: any) => (
+        {cases?.map((item: CaseRecord) => (
           <div key={item.case_id} className="bg-white border rounded-lg p-5 shadow-sm">
             <p className="font-bold text-lg">{item.patient_name}</p>
 
