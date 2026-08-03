@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { makeCaseNo } from "@/lib/case-no";
 
 export default function CaseRegisterPage() {
   const [hospitalCode, setHospitalCode] = useState("");
@@ -36,22 +37,33 @@ export default function CaseRegisterPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const h = params.get("h");
+    const q = params.get("q");
 
-    if (h) {
-      setHospitalCode(h);
-      loadHospital(h);
-    }
+    loadHospital({ h, q });
   }, []);
 
-  async function loadHospital(code: string) {
-    const { data } = await supabase
-      .from("hospitals")
-      .select("hospital_id")
-      .eq("hospital_code", code)
-      .single();
+  async function loadHospital({
+    h,
+    q,
+  }: {
+    h: string | null;
+    q: string | null;
+  }) {
+    if (!h && !q) return;
+
+    let query = supabase.from("hospitals").select("*");
+
+    if (q) {
+      query = query.eq("qr_token", q);
+    } else {
+      query = query.eq("hospital_code", h);
+    }
+
+    const { data } = await query.single();
 
     if (data) {
       setHospitalId(data.hospital_id);
+      setHospitalCode(data.hospital_code || "");
     }
   }
 
@@ -68,6 +80,27 @@ export default function CaseRegisterPage() {
 
     if (!privacyAgreed) {
       setMessage("개인정보 동의가 필요합니다.");
+      return;
+    }
+
+    setMessage("중복 등록 여부를 확인 중입니다...");
+
+    const { data: existingCase } = await supabase
+      .from("cases")
+      .select("case_id, patient_name, room_no, status")
+      .eq("hospital_id", hospitalId)
+      .eq("patient_name", patientName)
+      .eq("patient_birth_date", patientBirthDate || null)
+      .eq("status", "입원중")
+      .maybeSingle();
+
+    if (existingCase) {
+      setMessage("이미 등록된 입원중 환자입니다. 기존 사례로 이동합니다.");
+
+      setTimeout(() => {
+        window.location.href = `/cases/${existingCase.case_id}`;
+      }, 1200);
+
       return;
     }
 
@@ -95,6 +128,7 @@ export default function CaseRegisterPage() {
       .from("cases")
       .insert({
         hospital_id: hospitalId,
+        case_no: makeCaseNo(),
         registration_no: null,
         source_type: "hospital_qr",
         family_code: familyCode,
@@ -143,14 +177,14 @@ export default function CaseRegisterPage() {
 
     setTimeout(() => {
       window.location.href = `/cases/${caseData.case_id}`;
-    }, 1500);
+    }, 1200);
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 space-y-5">
         <h1 className="text-2xl font-bold">간병인 & 환자 등록</h1>
-        <p className="text-sm text-gray-500">병원코드: {hospitalCode}</p>
+        <p className="text-sm text-gray-500">병원코드: {hospitalCode || "-"}</p>
 
         <section>
           <h2 className="font-bold mb-3">간병인 정보</h2>

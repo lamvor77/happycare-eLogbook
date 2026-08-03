@@ -3,10 +3,11 @@
 export default function PrintButton() {
   return (
     <button
+      type="button"
       onClick={() => window.print()}
-      className="mt-6 bg-blue-600 text-white px-4 py-2 rounded print:hidden"
+      className="print:hidden bg-blue-600 text-white px-4 py-2 rounded"
     >
-      PDF로 저장/인쇄
+      인쇄하기
     </button>
   );
 }

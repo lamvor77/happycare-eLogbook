@@ -1,5 +1,13 @@
 import { supabase } from "@/lib/supabase";
 
+function getLocationFailureLabel(reason?: string | null) {
+  if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
+  if (reason === "position_unavailable") return "기기에서 위치정보를 확인할 수 없음";
+  if (reason === "timeout") return "위치 확인 시간이 초과됨";
+  if (reason === "geolocation_not_supported") return "기기 또는 브라우저가 위치 확인을 지원하지 않음";
+  if (reason === "unknown_error") return "알 수 없는 위치 확인 오류";
+  return "미기록 사유를 확인할 수 없음";
+}
 
 export default async function CaseCareLogsPage({
   params,
@@ -8,11 +16,27 @@ export default async function CaseCareLogsPage({
 }) {
   const { id } = await params;
 
-  const { data: caseData } = await supabase
+  const { data: caseData, error: caseError } = await supabase
     .from("cases")
-    .select("patient_name")
+    .select(`
+      case_id,
+      case_no,
+      patient_name,
+      room_no,
+      hospitals (
+        hospital_name
+      )
+    `)
     .eq("case_id", id)
     .single();
+
+  if (caseError || !caseData) {
+    return (
+      <main className="p-8">
+        사례 정보를 찾을 수 없습니다.
+      </main>
+    );
+  }
 
   const { data: logs, error } = await supabase
     .from("care_logs")
@@ -24,67 +48,169 @@ export default async function CaseCareLogsPage({
       )
     `)
     .eq("case_id", id)
-    .order("care_date", { ascending: false });
+    .order("care_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    return <main className="p-8">오류: {error.message}</main>;
+    return (
+      <main className="p-8">
+        간병일지 조회 오류: {error.message}
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto space-y-4">
         <div className="bg-white rounded-lg shadow p-5">
-          <h1 className="text-2xl font-bold">통합 간병일지</h1>
-          <p className="text-gray-600 mt-2">
-            환자명: {caseData?.patient_name || "-"}
-          </p>
+          <h1 className="text-2xl font-bold">
+            통합 간병일지
+          </h1>
+
+          <div className="mt-3 space-y-1 text-sm text-gray-600">
+            <p>환자명: {caseData.patient_name || "-"}</p>
+            <p>사례번호: {caseData.case_no || "-"}</p>
+            <p>병원: {(caseData.hospitals as any)?.hospital_name || "-"}</p>
+            <p>입원호실: {caseData.room_no || "-"}</p>
+          </div>
         </div>
 
         {logs && logs.length > 0 ? (
-          logs.map((log) => (
-            <div
-              key={log.log_id}
-              className="bg-white border rounded-lg p-5 shadow-sm"
-            >
-              <div className="mb-3">
-                <p className="font-bold text-lg">{log.care_date}</p>
-                <p className="text-sm text-gray-500">
-                  작성시간:{" "}
-                  {log.created_at
-                    ? new Date(log.created_at).toLocaleString("ko-KR")
-                    : "-"}
-                </p>
-              </div>
+          logs.map((log: any) => {
+            const locationChecked =
+              log.location_status === "checked";
 
-              <div className="mb-3 text-sm">
-                <p>
-                  작성자: {log.writer_name || log.caregivers?.caregiver_name || "-"}
-                </p>
-                <p>관계: {log.relationship || "-"}</p>
-              </div>
+            return (
+              <div
+                key={log.log_id}
+                className="bg-white border rounded-lg p-5 shadow-sm"
+              >
+                <div className="mb-4">
+                  <p className="font-bold text-lg">
+                    {log.care_date}
+                  </p>
 
-              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <p>식사보조: {log.meal_assist ? "O" : "X"}</p>
-                <p>이동보조: {log.move_assist ? "O" : "X"}</p>
-                <p>배설보조: {log.toilet_assist ? "O" : "X"}</p>
-                <p>위생관리: {log.hygiene_assist ? "O" : "X"}</p>
-                <p>체위변경: {log.position_change ? "O" : "X"}</p>
-                <p>
-                  위치확인:{" "}
-                  {log.location_status === "checked" ? "확인" : "미사용"}
-                </p>
-              </div>
+                  <p className="text-sm text-gray-500">
+                    작성시간:{" "}
+                    {log.created_at
+                      ? new Date(log.created_at).toLocaleString("ko-KR")
+                      : "-"}
+                  </p>
+                </div>
 
-              <div className="border-t pt-3 text-sm">
-                <p>특이사항: {log.memo || "-"}</p>
+                <div className="mb-4 rounded border bg-gray-50 p-3 text-sm">
+                  <p>
+                    작성자:{" "}
+                    {log.writer_name ||
+                      log.signature_name ||
+                      log.caregivers?.caregiver_name ||
+                      "-"}
+                  </p>
+
+                  <p>
+                    환자와의 관계: {log.relationship || "-"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                  <p>
+                    식사보조: {log.meal_assist ? "O" : "X"}
+                  </p>
+
+                  <p>
+                    이동보조: {log.move_assist ? "O" : "X"}
+                  </p>
+
+                  <p>
+                    배설보조: {log.toilet_assist ? "O" : "X"}
+                  </p>
+
+                  <p>
+                    위생관리: {log.hygiene_assist ? "O" : "X"}
+                  </p>
+
+                  <p>
+                    체위변경: {log.position_change ? "O" : "X"}
+                  </p>
+                </div>
+
+                <div
+                  className={`rounded border p-3 text-sm ${
+                    locationChecked
+                      ? "bg-green-50 border-green-200"
+                      : "bg-red-50 border-red-200"
+                  }`}
+                >
+                  <p className="font-bold">
+                    위치 확인:{" "}
+                    {locationChecked ? "확인 완료" : "미기록"}
+                  </p>
+
+                  {locationChecked ? (
+                    <>
+                      <p className="mt-1 text-gray-700">
+                        확인시간:{" "}
+                        {log.location_checked_at
+                          ? new Date(
+                              log.location_checked_at
+                            ).toLocaleString("ko-KR")
+                          : "-"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        위도: {log.latitude ?? "-"}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        경도: {log.longitude ?? "-"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-red-700">
+                      미기록 사유:{" "}
+                      {getLocationFailureLabel(
+                        log.location_failure_reason
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t mt-4 pt-3 text-sm">
+                  <p>
+                    특이사항: {log.memo || "-"}
+                  </p>
+
+                  <p className="mt-1">
+                    전자서명:{" "}
+                    {log.signature_name ||
+                      log.writer_name ||
+                      "-"}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="bg-white border rounded-lg p-5 text-gray-500">
             아직 작성된 간병일지가 없습니다.
           </div>
         )}
+
+        <div className="grid grid-cols-1 gap-2 pb-8">
+          <a
+            href={`/case-care-log/${caseData.case_id}`}
+            className="text-center bg-blue-600 text-white px-4 py-3 rounded"
+          >
+            오늘 간병일지 작성
+          </a>
+
+          <a
+            href={`/cases/${caseData.case_id}`}
+            className="text-center bg-gray-700 text-white px-4 py-3 rounded"
+          >
+            사례 상세로 돌아가기
+          </a>
+        </div>
       </div>
     </main>
   );

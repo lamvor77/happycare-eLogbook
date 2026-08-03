@@ -3,22 +3,34 @@ import { supabase } from "@/lib/supabase";
 export default async function LogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ h?: string }>;
+  searchParams: Promise<{ h?: string; q?: string }>;
 }) {
-  const { h } = await searchParams;
+  const { h, q } = await searchParams;
 
-  if (!h) {
+  if (!h && !q) {
     return <main className="p-8">병원 QR 정보가 없습니다.</main>;
   }
 
-  const { data: hospital } = await supabase
-    .from("hospitals")
-    .select("*")
-    .eq("hospital_code", h)
-    .single();
+  let query = supabase.from("hospitals").select("*");
+
+  if (q) {
+    query = query.eq("qr_token", q);
+  } else {
+    query = query.eq("hospital_code", h);
+  }
+
+  const { data: hospital } = await query.single();
 
   if (!hospital) {
     return <main className="p-8">등록되지 않은 병원입니다.</main>;
+  }
+
+  if (hospital.status !== "active") {
+    return (
+      <main className="p-8">
+        계약이 종료되었거나 사용할 수 없는 병원입니다.
+      </main>
+    );
   }
 
   const { data: cases } = await supabase
@@ -43,10 +55,6 @@ export default async function LogPage({
           <p className="text-sm text-gray-500 mt-1">
             {hospital.hospital_address || "-"}
           </p>
-
-          <div className="border rounded p-3 mt-4 text-sm">
-            <p>병원코드: {hospital.hospital_code}</p>
-          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow p-5">
@@ -54,7 +62,7 @@ export default async function LogPage({
 
           {cases && cases.length > 0 ? (
             <div className="space-y-3">
-              {cases.map((caseItem) => (
+              {cases.map((caseItem: any) => (
                 <a
                   key={caseItem.case_id}
                   href={`/cases/${caseItem.case_id}`}
@@ -78,7 +86,7 @@ export default async function LogPage({
         </div>
 
         <a
-          href={`/case-register?h=${hospital.hospital_code}`}
+          href={`/case-register?q=${hospital.qr_token}`}
           className="block text-center bg-blue-600 text-white p-4 rounded-lg font-bold"
         >
           간병인 & 환자 등록하기

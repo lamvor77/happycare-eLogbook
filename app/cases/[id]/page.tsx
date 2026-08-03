@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
+import CaseHistory from "./CaseHistory";
 
 export default async function CaseDetailPage({
   params,
@@ -60,6 +61,7 @@ export default async function CaseDetailPage({
           </p>
 
           <div className="space-y-2 text-sm">
+            <p>사례번호: {caseData.case_no || "-"}</p>
             <p>병원: {caseData.hospitals?.hospital_name || "-"}</p>
             <p>병원주소: {caseData.hospitals?.hospital_address || "-"}</p>
             <p>입원호실: {caseData.room_no || "-"}</p>
@@ -154,6 +156,8 @@ export default async function CaseDetailPage({
           </div>
         </div>
 
+          <CaseHistory caseId={caseData.case_id} /> 
+
         <div className="grid grid-cols-1 gap-2">
         <a
             href={`/case-care-log/${caseData.case_id}`}
@@ -177,8 +181,7 @@ export default async function CaseDetailPage({
         </a>
         </div>
 
-        <EndCareButton
-        caseId={caseData.case_id}
+        <EndCareButton caseId={caseData.case_id}
         />
       </div>
     </main>

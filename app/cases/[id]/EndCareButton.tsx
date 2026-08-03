@@ -12,16 +12,17 @@ export default function EndCareButton({
 
   async function handleEndCare() {
     const ok = confirm("간병을 종료하시겠습니까?");
-
     if (!ok) return;
 
     setMessage("간병 종료 처리 중입니다...");
+
+    const today = new Date().toISOString().slice(0, 10);
 
     const { error } = await supabase
       .from("cases")
       .update({
         status: "간병종료",
-        care_end_date: new Date().toISOString().slice(0, 10),
+        care_end_date: today,
       })
       .eq("case_id", caseId);
 
@@ -29,6 +30,19 @@ export default function EndCareButton({
       setMessage("간병 종료 실패: " + error.message);
       return;
     }
+
+    await supabase.from("case_history").insert({
+      case_id: caseId,
+      history_type: "END",
+      title: "간병종료",
+      action: "간병종료",
+      description: `간병이 종료되었습니다. 종료일: ${today}`,
+      actor: "가족간병인",
+      after_data: {
+        status: "간병종료",
+        care_end_date: today,
+      },
+    });
 
     setMessage("간병이 종료되었습니다.");
 
