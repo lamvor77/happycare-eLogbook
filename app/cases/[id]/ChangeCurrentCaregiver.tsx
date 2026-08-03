@@ -1,34 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useState } from "react";
 
 export default function ChangeCurrentCaregiver({
   caseId,
   caregivers,
+  canChange,
 }: {
   caseId: string;
   caregivers: any[];
+  canChange: boolean;
 }) {
   const [selectedId, setSelectedId] = useState("");
   const [message, setMessage] = useState("");
-  const [loginCaregiverId, setLoginCaregiverId] = useState("");
-
-  useEffect(() => {
-    const savedCaregiverId = localStorage.getItem("caregiver_id");
-
-    if (savedCaregiverId) {
-      setLoginCaregiverId(savedCaregiverId);
-    }
-  }, []);
-
-  const currentCaregiver = caregivers.find(
-    (item) => item.is_current_caregiver
-  );
-
-  const canChange =
-    loginCaregiverId &&
-    currentCaregiver?.caregiver_id === loginCaregiverId;
+  const [saving, setSaving] = useState(false);
 
   async function handleChange() {
     if (!selectedId) {
@@ -36,25 +21,21 @@ export default function ChangeCurrentCaregiver({
       return;
     }
 
+    setSaving(true);
     setMessage("변경 중입니다...");
 
-    const { error: resetError } = await supabase
-      .from("case_caregivers")
-      .update({ is_current_caregiver: false })
-      .eq("case_id", caseId);
+    const response = await fetch(`/api/cases/${caseId}/current-caregiver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ case_caregiver_id: selectedId }),
+    });
 
-    if (resetError) {
-      setMessage("기존 간병인 해제 실패: " + resetError.message);
-      return;
-    }
+    setSaving(false);
 
-    const { error } = await supabase
-      .from("case_caregivers")
-      .update({ is_current_caregiver: true })
-      .eq("case_caregiver_id", selectedId);
+    const body = await response.json().catch(() => null);
 
-    if (error) {
-      setMessage("변경 실패: " + error.message);
+    if (!response.ok) {
+      setMessage(body?.error || "변경에 실패했습니다.");
       return;
     }
 
@@ -107,9 +88,10 @@ export default function ChangeCurrentCaregiver({
 
       <button
         onClick={handleChange}
-        className="w-full bg-orange-600 text-white p-3 rounded"
+        disabled={saving}
+        className="w-full bg-orange-600 text-white p-3 rounded disabled:opacity-50"
       >
-        현재 간병인 변경
+        {saving ? "변경 중..." : "현재 간병인 변경"}
       </button>
 
       {message && (

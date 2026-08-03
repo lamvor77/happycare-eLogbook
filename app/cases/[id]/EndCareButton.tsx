@@ -1,48 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
 
 export default function EndCareButton({
   caseId,
+  canEnd,
 }: {
   caseId: string;
+  canEnd: boolean;
 }) {
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function handleEndCare() {
     const ok = confirm("간병을 종료하시겠습니까?");
     if (!ok) return;
 
+    setSaving(true);
     setMessage("간병 종료 처리 중입니다...");
 
-    const today = new Date().toISOString().slice(0, 10);
+    const response = await fetch(`/api/cases/${caseId}/end-care`, {
+      method: "POST",
+    });
 
-    const { error } = await supabase
-      .from("cases")
-      .update({
-        status: "간병종료",
-        care_end_date: today,
-      })
-      .eq("case_id", caseId);
+    setSaving(false);
 
-    if (error) {
-      setMessage("간병 종료 실패: " + error.message);
+    const body = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setMessage(body?.error || "간병 종료에 실패했습니다.");
       return;
     }
-
-    await supabase.from("case_history").insert({
-      case_id: caseId,
-      history_type: "END",
-      title: "간병종료",
-      action: "간병종료",
-      description: `간병이 종료되었습니다. 종료일: ${today}`,
-      actor: "가족간병인",
-      after_data: {
-        status: "간병종료",
-        care_end_date: today,
-      },
-    });
 
     setMessage("간병이 종료되었습니다.");
 
@@ -51,13 +39,31 @@ export default function EndCareButton({
     }, 1000);
   }
 
+  if (!canEnd) {
+    return (
+      <div className="bg-white rounded-lg shadow p-5">
+        <p className="text-sm text-gray-600">
+          현재 간병인으로 로그인한 경우에만 간병을 종료할 수 있습니다.
+        </p>
+
+        <a
+          href="/caregiver-login"
+          className="inline-block mt-3 bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          간병인 로그인
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-lg shadow p-5">
       <button
         onClick={handleEndCare}
-        className="w-full bg-red-600 text-white p-3 rounded font-bold"
+        disabled={saving}
+        className="w-full bg-red-600 text-white p-3 rounded font-bold disabled:opacity-50"
       >
-        간병종료
+        {saving ? "처리 중..." : "간병종료"}
       </button>
 
       {message && (

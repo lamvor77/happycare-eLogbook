@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { getCurrentCaregiverStatus } from "@/lib/caregiver-auth";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
@@ -47,6 +48,9 @@ export default async function CaseDetailPage({
   const currentCaregiver = caseData.case_caregivers?.find(
     (item: any) => item.is_current_caregiver
   );
+
+  const caregiverStatus = await getCurrentCaregiverStatus(id);
+  const canManage = caregiverStatus.loggedIn && caregiverStatus.isCurrent;
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -135,6 +139,7 @@ export default async function CaseDetailPage({
         <ChangeCurrentCaregiver
           caseId={caseData.case_id}
           caregivers={caseData.case_caregivers || []}
+          canChange={canManage}
         />
 
         <div className="bg-white rounded-lg shadow p-5">
@@ -181,7 +186,7 @@ export default async function CaseDetailPage({
         </a>
         </div>
 
-        <EndCareButton caseId={caseData.case_id}
+        <EndCareButton caseId={caseData.case_id} canEnd={canManage}
         />
       </div>
     </main>
