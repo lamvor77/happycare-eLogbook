@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { makeCaseNo } from "@/lib/case-no";
 
 export async function POST(request: Request) {
@@ -18,6 +18,21 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "인증에 실패했습니다." },
       { status: 401 }
+    );
+  }
+
+  // 시크릿 검증을 통과한 요청만 service_role 클라이언트를 생성한다.
+  // 이 클라이언트는 RLS를 우회하므로 이 라우트 밖으로 내보내거나
+  // 브라우저 코드에서 import하지 않는다(lib/supabase-admin.ts의
+  // "server-only" 가드 참고).
+  let supabase;
+  try {
+    supabase = createSupabaseAdminClient();
+  } catch (error: any) {
+    console.error("supabase-admin 클라이언트 생성 실패:", error?.message);
+    return NextResponse.json(
+      { error: "서버 설정 오류입니다." },
+      { status: 500 }
     );
   }
 
@@ -78,8 +93,9 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      console.error("google-form-sync upsert 실패:", error.message);
       return NextResponse.json(
-        { error: error.message },
+        { error: "동기화 처리에 실패했습니다." },
         { status: 500 }
       );
     }
@@ -91,8 +107,9 @@ export async function POST(request: Request) {
       family_code: data.family_code,
     });
   } catch (error: any) {
+    console.error("google-form-sync 처리 중 오류:", error?.message);
     return NextResponse.json(
-      { error: error.message },
+      { error: "동기화 처리에 실패했습니다." },
       { status: 500 }
     );
   }

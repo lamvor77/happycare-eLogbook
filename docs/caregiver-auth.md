@@ -68,24 +68,23 @@ Vonage 등)를 통해 발송한다.
 
 ## 5. RLS SQL 적용 순서
 
+> **최신 절차는 `docs/rls-rollout.md`를 따를 것.** 아래는 이 문서가 처음
+> 작성된 시점(3단계)의 요약이며, 이후 4~5단계에서 admin 페이지 인증
+> 클라이언트 전환, 등록/참여 서버 API 전환, 파일명 재정리(120300 →
+> 120500)가 모두 반영되었다. 실제 적용 순서, 관리자 bootstrap 절차,
+> 캐어기버 백필 절차, smoke test 방법은 `docs/rls-rollout.md`에 있다.
+
 `supabase/migrations/` 아래 파일을 **이 순서대로**, 각 단계마다 결과를
-확인하면서 수동 적용한다(자동 실행 금지):
+확인하면서 수동 적용한다(자동 실행 금지) — 자세한 선행 조건과 각 단계별
+검증은 `docs/rls-rollout.md` 참고:
 
 1. `20260803120000_caregiver_auth_link.sql` — `auth_user_id`,
    `phone_normalized`, `resident_number_masked` 컬럼 추가.
-2. `20260803120200_case_caregiver_functions.sql` — 현재 간병인 변경
+2. `20260803120050_admin_users.sql` — 관리자 판별 테이블/함수.
+3. `20260803120200_case_caregiver_functions.sql` — 현재 간병인 변경
    RPC(`set_current_caregiver`)와 부분 유니크 인덱스.
-3. `20260803120300_rls_policies.sql` — 실제 RLS 정책.
-   **주의**: 이 파일을 적용하기 전에 반드시 아래를 먼저 처리할 것.
-   - `app/admin/**` 페이지들의 데이터 조회를 `lib/supabase.ts`(anon)에서
-     `lib/supabase-server.ts`(로그인 세션 바인딩)로 전환한다. 그렇지 않으면
-     관리자 자신도 자기 정책에 막혀 데이터를 볼 수 없다.
-   - `app/log`, `app/case-register`, `app/case-join`,
-     `app/api/google-form-sync`의 anon insert/조회 경로를 서버 라우트 +
-     `service_role`(또는 별도 anon insert 정책)로 전환한다. 전환 전에 이
-     RLS를 적용하면 신규 등록/구글폼 연동이 즉시 실패한다.
-   - 자세한 영향 목록은 `20260803120300_rls_policies.sql` 파일 상단 주석
-     참고.
+4. `20260803120400_registration_functions.sql` — 최초 등록/가족참여 RPC.
+5. `20260803120500_rls_policies.sql` — 실제 RLS 정책(이 파일이 마지막).
 
 각 파일은 staging 프로젝트에서 먼저 적용해 보고, 기존 화면들이 예상대로
 동작(또는 예상대로 차단)하는지 확인한 뒤 운영에 반영한다.

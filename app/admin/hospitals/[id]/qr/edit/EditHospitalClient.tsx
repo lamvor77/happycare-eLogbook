@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 
 export default function EditHospitalClient({
   params,
@@ -15,20 +14,18 @@ export default function EditHospitalClient({
   const [hospitalPhone, setHospitalPhone] = useState("");
   const [status, setStatus] = useState("active");
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     async function loadHospital() {
-      const { data } = await supabase
-        .from("hospitals")
-        .select("*")
-        .eq("hospital_id", id)
-        .single();
+      const response = await fetch(`/api/admin/hospitals/${id}`);
+      const body = await response.json().catch(() => null);
 
-      if (data) {
-        setHospitalName(data.hospital_name || "");
-        setHospitalAddress(data.hospital_address || "");
-        setHospitalPhone(data.hospital_phone || "");
-        setStatus(data.status || "active");
+      if (response.ok && body?.hospital) {
+        setHospitalName(body.hospital.hospital_name || "");
+        setHospitalAddress(body.hospital.hospital_address || "");
+        setHospitalPhone(body.hospital.hospital_phone || "");
+        setStatus(body.hospital.status || "active");
       }
     }
 
@@ -41,20 +38,26 @@ export default function EditHospitalClient({
       return;
     }
 
+    setSaving(true);
     setMessage("저장 중입니다...");
 
-    const { error } = await supabase
-      .from("hospitals")
-      .update({
+    const response = await fetch(`/api/admin/hospitals/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         hospital_name: hospitalName,
         hospital_address: hospitalAddress,
         hospital_phone: hospitalPhone,
         status,
-      })
-      .eq("hospital_id", id);
+      }),
+    });
 
-    if (error) {
-      setMessage("저장 실패: " + error.message);
+    setSaving(false);
+
+    const body = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setMessage(body?.error || "저장에 실패했습니다.");
       return;
     }
 
@@ -102,9 +105,10 @@ export default function EditHospitalClient({
 
         <button
           onClick={handleSave}
-          className="w-full bg-blue-600 text-white p-3 rounded font-bold"
+          disabled={saving}
+          className="w-full bg-blue-600 text-white p-3 rounded font-bold disabled:opacity-50"
         >
-          저장하기
+          {saving ? "저장 중..." : "저장하기"}
         </button>
 
         {message && (

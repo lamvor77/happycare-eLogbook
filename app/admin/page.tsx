@@ -1,4 +1,3 @@
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/admin-auth";
 import LogoutButton from "./LogoutButton";
 
@@ -9,7 +8,7 @@ function getSourceLabel(sourceType?: string) {
 }
 
 export default async function AdminPage() {
-  const { email } = await requireAdmin();
+  const { supabase, email } = await requireAdmin();
 
   const { count: caseCount } = await supabase
     .from("cases")

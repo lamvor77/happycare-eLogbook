@@ -1,4 +1,3 @@
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/admin-auth";
 import PrintButton from "./PrintButton";
 
@@ -31,7 +30,7 @@ export default async function AdminCasePrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { id } = await params;
 

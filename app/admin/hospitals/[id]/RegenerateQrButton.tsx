@@ -1,11 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-
-function makeQrToken() {
-  return Math.random().toString(36).slice(2, 12).toUpperCase();
-}
 
 export default function RegenerateQrButton({
   hospitalId,
@@ -13,6 +8,7 @@ export default function RegenerateQrButton({
   hospitalId: string;
 }) {
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function handleRegenerate() {
     const ok = confirm(
@@ -21,17 +17,20 @@ export default function RegenerateQrButton({
 
     if (!ok) return;
 
+    setSaving(true);
     setMessage("QR 재발급 중입니다...");
 
-    const { error } = await supabase
-      .from("hospitals")
-      .update({
-        qr_token: makeQrToken(),
-      })
-      .eq("hospital_id", hospitalId);
+    const response = await fetch(
+      `/api/admin/hospitals/${hospitalId}/regenerate-qr`,
+      { method: "POST" }
+    );
 
-    if (error) {
-      setMessage("QR 재발급 실패: " + error.message);
+    setSaving(false);
+
+    const body = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setMessage(body?.error || "QR 재발급에 실패했습니다.");
       return;
     }
 
@@ -46,9 +45,10 @@ export default function RegenerateQrButton({
     <div className="mt-4 print:hidden">
       <button
         onClick={handleRegenerate}
-        className="bg-red-600 text-white px-4 py-2 rounded"
+        disabled={saving}
+        className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
       >
-        QR 재발급
+        {saving ? "재발급 중..." : "QR 재발급"}
       </button>
 
       {message && <p className="mt-3 text-sm text-red-600">{message}</p>}

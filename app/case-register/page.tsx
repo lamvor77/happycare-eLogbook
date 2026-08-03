@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { makeCaseNo } from "@/lib/case-no";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { toE164 } from "@/lib/phone";
+
+type Step = "phone" | "code" | "form";
 
 export default function CaseRegisterPage() {
-  const [hospitalCode, setHospitalCode] = useState("");
-  const [hospitalId, setHospitalId] = useState("");
+  const [step, setStep] = useState<Step>("phone");
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  const [hospitalToken, setHospitalToken] = useState<string | null>(null);
+  const [hospitalCode, setHospitalCode] = useState<string | null>(null);
+  const [hospitalName, setHospitalName] = useState("");
+
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
 
   const [caregiverName, setCaregiverName] = useState("");
-  const [residentNumber, setResidentNumber] = useState("");
+  const [residentNumberFront7, setResidentNumberFront7] = useState("");
   const [caregiverPhone, setCaregiverPhone] = useState("");
 
   const [patientName, setPatientName] = useState("");
@@ -33,42 +42,105 @@ export default function CaseRegisterPage() {
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const h = params.get("h");
     const q = params.get("q");
 
-    loadHospital({ h, q });
+    setHospitalCode(h);
+    setHospitalToken(q);
+
+    async function loadHospital() {
+      if (!h && !q) return;
+
+      const query = q ? `token=${q}` : `code=${h}`;
+      const response = await fetch(`/api/hospitals/lookup?${query}`);
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.hospital) {
+        setHospitalName(body.hospital.hospital_name);
+      }
+    }
+
+    async function checkSession() {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session) {
+        setStep("form");
+      }
+
+      setCheckingSession(false);
+    }
+
+    loadHospital();
+    checkSession();
   }, []);
 
-  async function loadHospital({
-    h,
-    q,
-  }: {
-    h: string | null;
-    q: string | null;
-  }) {
-    if (!h && !q) return;
-
-    let query = supabase.from("hospitals").select("*");
-
-    if (q) {
-      query = query.eq("qr_token", q);
-    } else {
-      query = query.eq("hospital_code", h);
+  async function handleSendCode() {
+    if (!phone.trim()) {
+      setMessage("휴대폰번호를 입력해주세요.");
+      return;
     }
 
-    const { data } = await query.single();
+    setSaving(true);
+    setMessage("");
 
-    if (data) {
-      setHospitalId(data.hospital_id);
-      setHospitalCode(data.hospital_code || "");
+    const supabase = createSupabaseBrowserClient();
+
+    // 최초 등록은 신규 가입 성격이므로 shouldCreateUser: true를 쓴다
+    // (로그인 화면 app/caregiver-login은 기존 계정만 허용하도록 false).
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: toE164(phone),
+      options: { shouldCreateUser: true },
+    });
+
+    setSaving(false);
+
+    if (error) {
+      setMessage("인증코드 전송에 실패했습니다. 휴대폰번호를 확인해주세요.");
+      return;
     }
+
+    setStep("code");
+    setMessage("입력하신 휴대폰으로 인증코드를 보냈습니다.");
+  }
+
+  async function handleVerifyCode() {
+    if (!code.trim()) {
+      setMessage("인증코드를 입력해주세요.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    const supabase = createSupabaseBrowserClient();
+
+    const { error } = await supabase.auth.verifyOtp({
+      phone: toE164(phone),
+      token: code.trim(),
+      type: "sms",
+    });
+
+    setSaving(false);
+
+    if (error) {
+      setMessage("인증코드가 올바르지 않거나 만료되었습니다.");
+      return;
+    }
+
+    setCaregiverPhone(phone);
+    setStep("form");
+    setMessage("휴대폰 인증이 완료되었습니다. 이어서 등록 정보를 입력해주세요.");
   }
 
   async function handleSubmit() {
-    if (!hospitalId) {
+    if (!hospitalToken && !hospitalCode) {
       setMessage("병원 정보를 찾을 수 없습니다.");
       return;
     }
@@ -83,59 +155,23 @@ export default function CaseRegisterPage() {
       return;
     }
 
-    setMessage("중복 등록 여부를 확인 중입니다...");
-
-    const { data: existingCase } = await supabase
-      .from("cases")
-      .select("case_id, patient_name, room_no, status")
-      .eq("hospital_id", hospitalId)
-      .eq("patient_name", patientName)
-      .eq("patient_birth_date", patientBirthDate || null)
-      .eq("status", "입원중")
-      .maybeSingle();
-
-    if (existingCase) {
-      setMessage("이미 등록된 입원중 환자입니다. 기존 사례로 이동합니다.");
-
-      setTimeout(() => {
-        window.location.href = `/cases/${existingCase.case_id}`;
-      }, 1200);
-
-      return;
-    }
-
+    setSaving(true);
     setMessage("등록 중입니다...");
 
-    const familyCode = "FC-" + Date.now();
-
-    const { data: caregiver, error: caregiverError } = await supabase
-      .from("caregivers")
-      .insert({
+    const response = await fetch("/api/cases/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hospital_token: hospitalToken,
+        hospital_code: hospitalCode,
         caregiver_name: caregiverName,
-        resident_number: residentNumber,
-        phone: caregiverPhone.replaceAll("-", ""),
-        otp_verified_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (caregiverError || !caregiver) {
-      setMessage("간병인 등록 실패: " + caregiverError?.message);
-      return;
-    }
-
-    const { data: caseData, error: caseError } = await supabase
-      .from("cases")
-      .insert({
-        hospital_id: hospitalId,
-        case_no: makeCaseNo(),
-        registration_no: null,
-        source_type: "hospital_qr",
-        family_code: familyCode,
+        caregiver_phone: toE164(caregiverPhone),
+        resident_number_front7: residentNumberFront7,
         patient_name: patientName,
         patient_birth_date: patientBirthDate || null,
         patient_phone: patientPhone,
         patient_gender: patientGender,
+        relationship,
         diagnosis_name: diagnosisName,
         room_no: roomNo,
         insurance_company: insuranceCompany,
@@ -147,106 +183,162 @@ export default function CaseRegisterPage() {
         care_end_date: careEndDate || null,
         memo,
         privacy_agreed: privacyAgreed,
-        status: "입원중",
-      })
-      .select()
-      .single();
+      }),
+    });
 
-    if (caseError || !caseData) {
-      setMessage("환자 사례 등록 실패: " + caseError?.message);
+    setSaving(false);
+
+    const body = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setMessage(body?.error || "등록에 실패했습니다.");
       return;
     }
 
-    const { error: linkError } = await supabase
-      .from("case_caregivers")
-      .insert({
-        case_id: caseData.case_id,
-        caregiver_id: caregiver.caregiver_id,
-        relationship,
-        is_primary_caregiver: true,
-        is_current_caregiver: true,
-        status: "활성",
-      });
-
-    if (linkError) {
-      setMessage("간병인 연결 실패: " + linkError.message);
-      return;
-    }
-
-    setMessage(`등록 완료. 가족코드: ${familyCode}`);
+    setMessage(
+      body.is_existing
+        ? "이미 등록된 입원중 환자입니다. 기존 사례로 이동합니다."
+        : `등록 완료. 가족코드: ${body.family_code}`
+    );
 
     setTimeout(() => {
-      window.location.href = `/cases/${caseData.case_id}`;
+      window.location.href = `/cases/${body.case_id}`;
     }, 1200);
+  }
+
+  if (checkingSession) {
+    return <main className="p-8">확인 중입니다...</main>;
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 space-y-5">
-        <h1 className="text-2xl font-bold">간병인 & 환자 등록</h1>
-        <p className="text-sm text-gray-500">병원코드: {hospitalCode || "-"}</p>
+        <h1 className="text-2xl font-bold">간병인 &amp; 환자 등록</h1>
+        <p className="text-sm text-gray-500">
+          병원: {hospitalName || hospitalCode || "-"}
+        </p>
 
-        <section>
-          <h2 className="font-bold mb-3">간병인 정보</h2>
-          <input className="w-full border p-3 rounded mb-3" placeholder="성명" value={caregiverName} onChange={(e) => setCaregiverName(e.target.value)} />
-          <input className="w-full border p-3 rounded mb-3" placeholder="주민등록번호" value={residentNumber} onChange={(e) => setResidentNumber(e.target.value)} />
-          <input className="w-full border p-3 rounded" placeholder="연락처" value={caregiverPhone} onChange={(e) => setCaregiverPhone(e.target.value)} />
-        </section>
+        {step !== "form" && (
+          <section>
+            <h2 className="font-bold mb-3">휴대폰 인증</h2>
+            <p className="text-sm text-gray-500 mb-3">
+              등록을 진행하려면 먼저 휴대폰 인증이 필요합니다.
+            </p>
 
-        <section>
-          <h2 className="font-bold mb-3">환자 정보</h2>
-          <input className="w-full border p-3 rounded mb-3" placeholder="환자명" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
-          <input className="w-full border p-3 rounded mb-3" placeholder="생년월일 예: 1950-01-01" value={patientBirthDate} onChange={(e) => setPatientBirthDate(e.target.value)} />
-          <input className="w-full border p-3 rounded mb-3" placeholder="환자 연락처" value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} />
+            <input
+              className="w-full border p-3 rounded mb-3 disabled:bg-gray-100"
+              placeholder="휴대폰번호"
+              value={phone}
+              disabled={step === "code"}
+              onChange={(e) => setPhone(e.target.value)}
+            />
 
-          <select className="w-full border p-3 rounded mb-3" value={patientGender} onChange={(e) => setPatientGender(e.target.value)}>
-            <option value="">성별 선택</option>
-            <option value="남">남</option>
-            <option value="여">여</option>
-          </select>
+            {step === "phone" && (
+              <button
+                onClick={handleSendCode}
+                disabled={saving}
+                className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
+              >
+                {saving ? "전송 중..." : "인증코드 받기"}
+              </button>
+            )}
 
-          <select className="w-full border p-3 rounded mb-3" value={relationship} onChange={(e) => setRelationship(e.target.value)}>
-            <option value="">환자와의 관계 선택</option>
-            <option value="배우자">배우자</option>
-            <option value="부모">부모</option>
-            <option value="자녀">자녀</option>
-            <option value="형제자매">형제자매</option>
-            <option value="지인">지인</option>
-            <option value="기타">기타</option>
-          </select>
+            {step === "code" && (
+              <>
+                <input
+                  className="w-full border p-3 rounded mb-3"
+                  placeholder="인증코드 6자리"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
 
-          <input className="w-full border p-3 rounded mb-3" placeholder="진단명" value={diagnosisName} onChange={(e) => setDiagnosisName(e.target.value)} />
-          <input className="w-full border p-3 rounded" placeholder="입원호실" value={roomNo} onChange={(e) => setRoomNo(e.target.value)} />
-        </section>
+                <button
+                  onClick={handleVerifyCode}
+                  disabled={saving}
+                  className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
+                >
+                  {saving ? "확인 중..." : "인증 확인"}
+                </button>
+              </>
+            )}
+          </section>
+        )}
 
-        <section>
-          <h2 className="font-bold mb-3">보험 정보</h2>
-          <input className="w-full border p-3 rounded mb-3" placeholder="보험사" value={insuranceCompany} onChange={(e) => setInsuranceCompany(e.target.value)} />
-          <input className="w-full border p-3 rounded mb-3" placeholder="사고유형" value={accidentType} onChange={(e) => setAccidentType(e.target.value)} />
-          <input className="w-full border p-3 rounded" placeholder="기타 사고유형" value={accidentTypeEtc} onChange={(e) => setAccidentTypeEtc(e.target.value)} />
-        </section>
+        {step === "form" && (
+          <>
+            <section>
+              <h2 className="font-bold mb-3">간병인 정보</h2>
+              <input className="w-full border p-3 rounded mb-3" placeholder="성명" value={caregiverName} onChange={(e) => setCaregiverName(e.target.value)} />
+              <input
+                className="w-full border p-3 rounded mb-3"
+                placeholder="주민등록번호 앞 7자리(선택)"
+                maxLength={7}
+                value={residentNumberFront7}
+                onChange={(e) => setResidentNumberFront7(e.target.value.replace(/[^0-9]/g, ""))}
+              />
+              <input className="w-full border p-3 rounded" placeholder="연락처" value={caregiverPhone} onChange={(e) => setCaregiverPhone(e.target.value)} />
+            </section>
 
-        <section>
-          <h2 className="font-bold mb-3">설계사 정보</h2>
-          <input className="w-full border p-3 rounded mb-3" placeholder="담당설계사" value={plannerName} onChange={(e) => setPlannerName(e.target.value)} />
-          <input className="w-full border p-3 rounded" placeholder="설계사 연락처" value={plannerPhone} onChange={(e) => setPlannerPhone(e.target.value)} />
-        </section>
+            <section>
+              <h2 className="font-bold mb-3">환자 정보</h2>
+              <input className="w-full border p-3 rounded mb-3" placeholder="환자명" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+              <input className="w-full border p-3 rounded mb-3" placeholder="생년월일 예: 1950-01-01" value={patientBirthDate} onChange={(e) => setPatientBirthDate(e.target.value)} />
+              <input className="w-full border p-3 rounded mb-3" placeholder="환자 연락처" value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} />
 
-        <section>
-          <h2 className="font-bold mb-3">기타</h2>
-          <input className="w-full border p-3 rounded mb-3" placeholder="간병개시 예정일 예: 2026-06-01" value={careStartDate} onChange={(e) => setCareStartDate(e.target.value)} />
-          <input className="w-full border p-3 rounded mb-3" placeholder="종료일 예: 2026-06-30" value={careEndDate} onChange={(e) => setCareEndDate(e.target.value)} />
-          <textarea className="w-full border p-3 rounded mb-3" placeholder="비고" value={memo} onChange={(e) => setMemo(e.target.value)} />
+              <select className="w-full border p-3 rounded mb-3" value={patientGender} onChange={(e) => setPatientGender(e.target.value)}>
+                <option value="">성별 선택</option>
+                <option value="남">남</option>
+                <option value="여">여</option>
+              </select>
 
-          <label className="flex gap-2 text-sm">
-            <input type="checkbox" checked={privacyAgreed} onChange={(e) => setPrivacyAgreed(e.target.checked)} />
-            개인정보 수집 및 이용에 동의합니다.
-          </label>
-        </section>
+              <select className="w-full border p-3 rounded mb-3" value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+                <option value="">환자와의 관계 선택</option>
+                <option value="배우자">배우자</option>
+                <option value="부모">부모</option>
+                <option value="자녀">자녀</option>
+                <option value="형제자매">형제자매</option>
+                <option value="지인">지인</option>
+                <option value="기타">기타</option>
+              </select>
 
-        <button onClick={handleSubmit} className="w-full bg-blue-600 text-white p-4 rounded-lg font-bold">
-          등록하기
-        </button>
+              <input className="w-full border p-3 rounded mb-3" placeholder="진단명" value={diagnosisName} onChange={(e) => setDiagnosisName(e.target.value)} />
+              <input className="w-full border p-3 rounded" placeholder="입원호실" value={roomNo} onChange={(e) => setRoomNo(e.target.value)} />
+            </section>
+
+            <section>
+              <h2 className="font-bold mb-3">보험 정보</h2>
+              <input className="w-full border p-3 rounded mb-3" placeholder="보험사" value={insuranceCompany} onChange={(e) => setInsuranceCompany(e.target.value)} />
+              <input className="w-full border p-3 rounded mb-3" placeholder="사고유형" value={accidentType} onChange={(e) => setAccidentType(e.target.value)} />
+              <input className="w-full border p-3 rounded" placeholder="기타 사고유형" value={accidentTypeEtc} onChange={(e) => setAccidentTypeEtc(e.target.value)} />
+            </section>
+
+            <section>
+              <h2 className="font-bold mb-3">설계사 정보</h2>
+              <input className="w-full border p-3 rounded mb-3" placeholder="담당설계사" value={plannerName} onChange={(e) => setPlannerName(e.target.value)} />
+              <input className="w-full border p-3 rounded" placeholder="설계사 연락처" value={plannerPhone} onChange={(e) => setPlannerPhone(e.target.value)} />
+            </section>
+
+            <section>
+              <h2 className="font-bold mb-3">기타</h2>
+              <input className="w-full border p-3 rounded mb-3" placeholder="간병개시 예정일 예: 2026-06-01" value={careStartDate} onChange={(e) => setCareStartDate(e.target.value)} />
+              <input className="w-full border p-3 rounded mb-3" placeholder="종료일 예: 2026-06-30" value={careEndDate} onChange={(e) => setCareEndDate(e.target.value)} />
+              <textarea className="w-full border p-3 rounded mb-3" placeholder="비고" value={memo} onChange={(e) => setMemo(e.target.value)} />
+
+              <label className="flex gap-2 text-sm">
+                <input type="checkbox" checked={privacyAgreed} onChange={(e) => setPrivacyAgreed(e.target.checked)} />
+                개인정보 수집 및 이용에 동의합니다.
+              </label>
+            </section>
+
+            <button
+              onClick={handleSubmit}
+              disabled={saving}
+              className="w-full bg-blue-600 text-white p-4 rounded-lg font-bold disabled:opacity-50"
+            >
+              {saving ? "등록 중..." : "등록하기"}
+            </button>
+          </>
+        )}
 
         {message && <p className="text-center text-sm">{message}</p>}
       </div>

@@ -1,4 +1,3 @@
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/admin-auth";
 
 function getLocationFailureLabel(reason?: string | null) {
@@ -26,7 +25,7 @@ function getLocationFailureLabel(reason?: string | null) {
 }
 
 export default async function LocationUnavailablePage() {
-  await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { data: logs, error } = await supabase
     .from("care_logs")

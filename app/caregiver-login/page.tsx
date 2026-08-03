@@ -2,26 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { toE164 } from "@/lib/phone";
 
 type Step = "phone" | "code";
-
-function toE164(raw: string) {
-  const digits = raw.replace(/[^0-9]/g, "");
-
-  if (raw.trim().startsWith("+")) {
-    return "+" + raw.replace(/[^0-9]/g, "");
-  }
-
-  if (digits.startsWith("82")) {
-    return "+" + digits;
-  }
-
-  if (digits.startsWith("0")) {
-    return "+82" + digits.slice(1);
-  }
-
-  return "+82" + digits;
-}
 
 export default function CaregiverLoginPage() {
   const [step, setStep] = useState<Step>("phone");
@@ -107,7 +90,7 @@ export default function CaregiverLoginPage() {
     setMessage(`${meBody.caregiver.caregiver_name}님 로그인되었습니다.`);
 
     setTimeout(() => {
-      window.location.href = "/";
+      window.location.href = "/my-cases";
     }, 1000);
   }
 

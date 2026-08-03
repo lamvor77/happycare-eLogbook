@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export class CaregiverAuthError extends Error {
@@ -51,6 +52,34 @@ export async function requireCaregiver() {
   }
 
   return session;
+}
+
+/**
+ * 페이지(Server Component)에서 사용한다. caregiver 연결이 없으면
+ * /caregiver-login으로 리다이렉트한다("최근 등록한 사례 보기" 등).
+ */
+export async function requireCaregiverPage() {
+  const session = await getCaregiverSession();
+
+  if (!session) {
+    redirect("/caregiver-login");
+  }
+
+  return session;
+}
+
+/**
+ * Supabase Auth 로그인 여부만 확인한다(caregivers 연결 여부는 확인하지 않음).
+ * 최초 등록/가족간병인 참여처럼 아직 caregivers 행이 없는 시점에 사용한다.
+ */
+export async function getAuthUser() {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return { supabase, user };
 }
 
 /**

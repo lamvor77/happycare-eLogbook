@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
 import RegenerateQrButton from "../RegenerateQrButton";
 
@@ -15,13 +14,12 @@ export default function HospitalQrClient({
 
   useEffect(() => {
     async function loadHospital() {
-      const { data } = await supabase
-        .from("hospitals")
-        .select("*")
-        .eq("hospital_id", id)
-        .single();
+      const response = await fetch(`/api/admin/hospitals/${id}`);
+      const body = await response.json().catch(() => null);
 
-      setHospital(data);
+      if (response.ok) {
+        setHospital(body.hospital);
+      }
     }
 
     loadHospital();

@@ -1,4 +1,3 @@
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/admin-auth";
 
 function getSourceLabel(sourceType?: string) {
@@ -12,7 +11,7 @@ export default async function AdminCasesPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string }>;
 }) {
-  await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { status, q } = await searchParams;
 

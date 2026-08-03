@@ -1,8 +1,7 @@
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/admin-auth";
 
 export default async function AdminHospitalsPage() {
-  await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { data: hospitals, error } = await supabase
     .from("hospitals")
