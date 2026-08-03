@@ -1,140 +1,110 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-type Step = "email" | "code";
-
 export default function AdminLoginPage() {
-  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSendCode() {
-    if (!email.trim()) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
       setMessage("이메일을 입력해주세요.");
       return;
     }
 
-    setLoading(true);
-    setMessage("");
-
-    const supabase = createSupabaseBrowserClient();
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false },
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setMessage(
-        "인증코드 전송에 실패했습니다. 등록된 관리자 이메일인지 확인해주세요."
-      );
-      return;
-    }
-
-    setStep("code");
-    setMessage("입력하신 이메일로 인증코드를 보냈습니다.");
-  }
-
-  async function handleVerifyCode() {
-    if (!code.trim()) {
-      setMessage("인증코드를 입력해주세요.");
+    if (!password) {
+      setMessage("비밀번호를 입력해주세요.");
       return;
     }
 
     setLoading(true);
     setMessage("");
 
-    const supabase = createSupabaseBrowserClient();
+    try {
+      const supabase = createSupabaseBrowserClient();
 
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "email",
-    });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
 
-    setLoading(false);
+      if (error) {
+        setMessage(
+          "로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요."
+        );
+        return;
+      }
 
-    if (error) {
-      setMessage("인증코드가 올바르지 않거나 만료되었습니다.");
-      return;
-    }
+      setMessage("로그인되었습니다. 관리자 화면으로 이동합니다.");
 
-    setMessage("로그인되었습니다. 이동 중입니다...");
-
-    setTimeout(() => {
       window.location.href = "/admin";
-    }, 800);
+    } catch {
+      setMessage("로그인 처리 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-lg shadow p-6">
-        <h1 className="text-2xl font-bold mb-2">관리자 로그인</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          관리자 로그인
+        </h1>
 
         <p className="text-sm text-gray-500 mb-6">
-          등록된 관리자 이메일로 인증코드를 받아 로그인합니다.
+          등록된 관리자 이메일과 비밀번호를 입력해주세요.
         </p>
 
-        <input
-          className="w-full border p-3 rounded mb-3 disabled:bg-gray-100"
-          placeholder="이메일"
-          type="email"
-          value={email}
-          disabled={step === "code"}
-          onChange={(event) => setEmail(event.target.value)}
-        />
+        <form onSubmit={handleLogin}>
+          <label className="block mb-2 text-sm font-bold">
+            이메일
+          </label>
 
-        {step === "email" && (
+          <input
+            className="w-full border p-3 rounded mb-4 disabled:bg-gray-100"
+            placeholder="관리자 이메일"
+            type="email"
+            autoComplete="email"
+            value={email}
+            disabled={loading}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          <label className="block mb-2 text-sm font-bold">
+            비밀번호
+          </label>
+
+          <input
+            className="w-full border p-3 rounded mb-4 disabled:bg-gray-100"
+            placeholder="비밀번호"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            disabled={loading}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
           <button
-            type="button"
-            onClick={handleSendCode}
+            type="submit"
             disabled={loading}
             className="w-full bg-blue-600 text-white p-3 rounded font-bold disabled:opacity-50"
           >
-            {loading ? "전송 중..." : "인증코드 받기"}
+            {loading ? "로그인 중..." : "로그인"}
           </button>
-        )}
-
-        {step === "code" && (
-          <>
-            <input
-              className="w-full border p-3 rounded mb-3"
-              placeholder="인증코드 6자리"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-            />
-
-            <button
-              type="button"
-              onClick={handleVerifyCode}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white p-3 rounded font-bold disabled:opacity-50"
-            >
-              {loading ? "확인 중..." : "로그인"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStep("email");
-                setCode("");
-                setMessage("");
-              }}
-              className="w-full mt-2 text-sm text-gray-500 underline"
-            >
-              이메일 다시 입력
-            </button>
-          </>
-        )}
+        </form>
 
         {message && (
-          <p className="mt-4 text-center text-sm">{message}</p>
+          <p className="mt-4 text-center text-sm">
+            {message}
+          </p>
         )}
       </div>
     </main>
