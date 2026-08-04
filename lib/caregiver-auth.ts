@@ -99,24 +99,66 @@ export async function requireCaregiverPage(nextPath?: string) {
 }
 
 /**
- * caseId에 대해 로그인한 caregiver가 "현재 간병인(is_current_caregiver=true,
- * status=활성)"이고, 해당 사례가 아직 "입원중"인지 서버에서 검증한다.
- * 간병종료된 사례는 세션이 유효해도 항상 거부한다. 클라이언트가 보낸 값은
- * 신뢰하지 않는다.
+ * 로그인한 caregiver가 caseId에 "활성 상태로 연결된 구성원"인지 확인한다
+ * (현재 간병인 여부와는 무관 — 사례 상세/작성기록처럼 조회만 하는 화면에서
+ * 쓴다). 클라이언트가 보낸 caregiver_id는 신뢰하지 않고, 항상 세션 쿠키로
+ * 식별한 caregiver_id로만 확인한다.
+ *
+ * 사례 자체가 존재하지 않는 경우(404 성격)와, 사례는 있지만 이 caregiver가
+ * 연결되어 있지 않은 경우(403 성격)를 구분해서 던진다 — 둘 다 case_id
+ * 존재 여부/연결 여부만 확인할 뿐, 환자명 등 실제 사례 데이터는 이 함수
+ * 안에서 절대 조회하지 않는다.
  */
-export async function requireCurrentCaregiverSession(caseId: string) {
+export async function requireCaseMemberSession(caseId: string) {
   const { supabase, caregiver, sessionId } = await requireCaregiverSession();
 
-  const { data: caseCaregiver } = await supabase
+  const { data: caseExists } = await supabase
+    .from("cases")
+    .select("case_id")
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  if (!caseExists) {
+    throw new CaregiverAuthError("사례 정보를 찾을 수 없습니다.", 404);
+  }
+
+  const { data: caseCaregiverData } = await supabase
     .from("case_caregivers")
-    .select("*, cases (status)")
+    .select("case_caregiver_id, is_current_caregiver, relationship, cases (status)")
     .eq("case_id", caseId)
     .eq("caregiver_id", caregiver.caregiver_id)
-    .eq("is_current_caregiver", true)
     .eq("status", "활성")
     .maybeSingle();
 
+  // Supabase가 다대일 관계(cases)를 배열로 추론하지만 실제로는 단일 객체다.
+  const caseCaregiver = caseCaregiverData as unknown as
+    | {
+        case_caregiver_id: string;
+        is_current_caregiver: boolean;
+        relationship: string;
+        cases: { status: string } | { status: string }[] | null;
+      }
+    | null;
+
   if (!caseCaregiver) {
+    throw new CaregiverAuthError("이 사례에 접근할 권한이 없습니다.", 403);
+  }
+
+  return { supabase, caregiver, caseCaregiver, sessionId };
+}
+
+/**
+ * caseId에 대해 로그인한 caregiver가 "현재 간병인(is_current_caregiver=true,
+ * status=활성)"이고, 해당 사례가 아직 "입원중"인지 서버에서 검증한다.
+ * 간병종료된 사례는 세션이 유효해도 새 일지 작성/변경을 항상 거부한다
+ * (기존 기록 조회는 requireCaseMemberSession()으로 계속 허용된다).
+ * 클라이언트가 보낸 값은 신뢰하지 않는다.
+ */
+export async function requireCurrentCaregiverSession(caseId: string) {
+  const { supabase, caregiver, caseCaregiver, sessionId } =
+    await requireCaseMemberSession(caseId);
+
+  if (!caseCaregiver.is_current_caregiver) {
     throw new CaregiverAuthError(
       "현재 간병인으로 등록된 경우에만 수행할 수 있습니다.",
       403
@@ -132,43 +174,4 @@ export async function requireCurrentCaregiverSession(caseId: string) {
   }
 
   return { supabase, caregiver, caseCaregiver, sessionId };
-}
-
-/**
- * 화면 표시용 소프트 체크. 권한 판단의 근거로 쓰지 않고, UI 상태
- * (버튼 활성화, 안내 문구)를 결정하는 용도로만 사용한다. 실제 저장/변경/
- * 종료는 항상 requireCurrentCaregiverSession()을 통해 서버에서 재검증한다.
- */
-export async function getCurrentCaregiverStatus(caseId: string) {
-  const session = await getCaregiverSession();
-
-  if (!session) {
-    return { loggedIn: false, isCurrent: false, caregiverName: null as string | null };
-  }
-
-  const { supabase, caregiver } = session;
-
-  const { data: caseCaregiverData } = await supabase
-    .from("case_caregivers")
-    .select("case_caregiver_id, cases (status)")
-    .eq("case_id", caseId)
-    .eq("caregiver_id", caregiver.caregiver_id)
-    .eq("is_current_caregiver", true)
-    .eq("status", "활성")
-    .maybeSingle();
-
-  // Supabase가 다대일 관계(cases)를 배열로 추론하지만 실제로는 단일 객체다.
-  const caseCaregiver = caseCaregiverData as unknown as
-    | { case_caregiver_id: string; cases: { status: string } | { status: string }[] | null }
-    | null;
-
-  const caseStatus = Array.isArray(caseCaregiver?.cases)
-    ? caseCaregiver?.cases[0]?.status
-    : caseCaregiver?.cases?.status;
-
-  return {
-    loggedIn: true,
-    isCurrent: Boolean(caseCaregiver) && caseStatus === "입원중",
-    caregiverName: caregiver.caregiver_name as string | null,
-  };
 }

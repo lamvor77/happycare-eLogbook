@@ -1,4 +1,5 @@
-import { supabase } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
 import type { CareLog, Hospital } from "@/types/domain";
 
 function getLocationFailureLabel(reason?: string | null) {
@@ -17,6 +18,30 @@ export default async function CaseCareLogsPage({
 }) {
   const { id } = await params;
 
+  // 통합 간병일지 조회 화면도 caseId URL만 안다고 아무나 볼 수 없어야
+  // 한다. "로그인 + 이 사례에 활성 상태로 연결된 caregiver인지"만 확인하고
+  // (현재 간병인 여부는 요구하지 않음 — 조회 전용 화면), 간병종료된 사례도
+  // 기존 기록은 계속 조회 가능하도록 case 상태는 확인하지 않는다.
+  let auth;
+
+  try {
+    auth = await requireCaseMemberSession(id);
+  } catch (authError) {
+    if (!(authError instanceof CaregiverAuthError)) {
+      throw authError;
+    }
+
+    if (authError.status === 401) {
+      redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}/care-logs`)}`);
+    }
+
+    // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
+    // 경우에도 환자 정보는 노출하지 않는다.
+    return <main className="p-8">{authError.message}</main>;
+  }
+
+  const { supabase } = auth;
+
   const { data: caseData, error: caseError } = await supabase
     .from("cases")
     .select(`
@@ -29,9 +54,17 @@ export default async function CaseCareLogsPage({
       )
     `)
     .eq("case_id", id)
-    .single();
+    .maybeSingle();
 
-  if (caseError || !caseData) {
+  if (caseError) {
+    return (
+      <main className="p-8">
+        사례 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
+      </main>
+    );
+  }
+
+  if (!caseData) {
     return (
       <main className="p-8">
         사례 정보를 찾을 수 없습니다.

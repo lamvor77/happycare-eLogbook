@@ -1,5 +1,5 @@
-import { supabase } from "@/lib/supabase";
-import { getCurrentCaregiverStatus } from "@/lib/caregiver-auth";
+import { redirect } from "next/navigation";
+import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
@@ -12,7 +12,33 @@ export default async function CaseDetailPage({
 }) {
   const { id } = await params;
 
-  const { data: caseData } = await supabase
+  // 사례 상세는 조회 화면이라 현재 간병인이 아닌 일반 가족간병인도 볼 수
+  // 있어야 하지만, caseId URL만 안다고 아무나 볼 수는 없어야 한다. 그래서
+  // "로그인 + 이 사례에 활성 상태로 연결된 caregiver인지"만 확인한다
+  // (현재 간병인 여부는 여기서 요구하지 않는다 — 쓰기 기능은 각 버튼이
+  // 호출하는 API가 requireCurrentCaregiverSession()으로 별도 검증한다).
+  // 클라이언트가 보낸 caregiver_id는 신뢰하지 않고 세션 쿠키로만 식별한다.
+  let auth;
+
+  try {
+    auth = await requireCaseMemberSession(id);
+  } catch (authError) {
+    if (!(authError instanceof CaregiverAuthError)) {
+      throw authError;
+    }
+
+    if (authError.status === 401) {
+      redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}`)}`);
+    }
+
+    // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
+    // 경우에도 환자 정보는 노출하지 않는다.
+    return <main className="p-8">{authError.message}</main>;
+  }
+
+  const { supabase, caseCaregiver } = auth;
+
+  const { data: caseData, error: caseError } = await supabase
     .from("cases")
     .select(`
       *,
@@ -34,7 +60,15 @@ export default async function CaseDetailPage({
       )
     `)
     .eq("case_id", id)
-    .single();
+    .maybeSingle();
+
+  if (caseError) {
+    return <main className="p-8">사례 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</main>;
+  }
+
+  if (!caseData) {
+    return <main className="p-8">사례 정보를 찾을 수 없습니다.</main>;
+  }
 
   const { data: careLogs } = await supabase
     .from("care_logs")
@@ -42,16 +76,17 @@ export default async function CaseDetailPage({
     .eq("case_id", id)
     .order("care_date", { ascending: false });
 
-  if (!caseData) {
-    return <main className="p-8">사례 정보를 찾을 수 없습니다.</main>;
-  }
-
   const currentCaregiver = caseData.case_caregivers?.find(
     (item: CaseCaregiver) => item.is_current_caregiver
   );
 
-  const caregiverStatus = await getCurrentCaregiverStatus(id);
-  const canManage = caregiverStatus.loggedIn && caregiverStatus.isCurrent;
+  // requireCaseMemberSession()이 이미 확인한 caseCaregiver 정보로 계산한다
+  // (별도 조회 없이) — 현재 간병인이면서 사례가 아직 "입원중"일 때만 현재
+  // 간병인 변경/간병종료 같은 관리 기능을 노출한다.
+  const memberCaseStatus = Array.isArray(caseCaregiver.cases)
+    ? caseCaregiver.cases[0]?.status
+    : caseCaregiver.cases?.status;
+  const canManage = caseCaregiver.is_current_caregiver && memberCaseStatus === "입원중";
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
