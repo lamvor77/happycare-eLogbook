@@ -1,5 +1,17 @@
+import "server-only";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getRawSessionToken, hashSessionToken } from "@/lib/caregiver-session";
+
+/**
+ * 간병인 인증은 더 이상 Supabase Auth(Phone Provider)를 사용하지 않는다.
+ * Solapi 기반 자체 SMS OTP로 휴대폰 소유를 1회 확인한 뒤, 자체 발급한
+ * HttpOnly 세션 쿠키(caregiver_sessions 테이블)로 로그인 상태를 유지한다.
+ * 이 파일의 모든 조회는 service_role 클라이언트(lib/supabase-admin.ts)로
+ * 수행한다 — caregivers는 더 이상 Supabase Auth JWT를 갖지 않으므로 RLS의
+ * auth.uid() 기반 정책은 이 경로에 적용되지 않는다(관리자 인증과는
+ * 무관 — 관리자는 계속 Supabase Auth 이메일+비밀번호를 사용한다).
+ */
 
 export class CaregiverAuthError extends Error {
   status: number;
@@ -12,39 +24,56 @@ export class CaregiverAuthError extends Error {
 }
 
 /**
- * 로그인 세션(Supabase Auth)과 caregivers.auth_user_id 연결 여부를 확인한다.
- * 로그인하지 않았거나 연결된 caregiver 행이 없으면 null을 반환한다(soft check).
+ * 세션 쿠키를 검증하고 연결된 caregiver를 반환한다(소프트 체크 — 실패해도
+ * 예외를 던지지 않고 null을 반환한다). 유효하면 last_used_at을 갱신한다.
  */
 export async function getCaregiverSession() {
-  const supabase = await createSupabaseServerClient();
+  const rawToken = await getRawSessionToken();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!rawToken) {
     return null;
   }
 
-  const { data: caregiver } = await supabase
-    .from("caregivers")
-    .select("*")
-    .eq("auth_user_id", user.id)
+  const tokenHash = hashSessionToken(rawToken);
+  const supabase = createSupabaseAdminClient();
+
+  const { data: session } = await supabase
+    .from("caregiver_sessions")
+    .select("session_id, caregiver_id, expires_at, revoked_at, caregivers (*)")
+    .eq("token_hash", tokenHash)
     .maybeSingle();
+
+  if (!session || session.revoked_at) {
+    return null;
+  }
+
+  if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {
+    return null;
+  }
+
+  const caregiver = Array.isArray(session.caregivers)
+    ? session.caregivers[0]
+    : session.caregivers;
 
   if (!caregiver) {
     return null;
   }
 
-  return { supabase, user, caregiver };
+  // 매 요청마다 재검증하므로 last_used_at도 매번 갱신한다(실패해도 로그인
+  // 자체를 막지는 않는다).
+  await supabase
+    .from("caregiver_sessions")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("session_id", session.session_id);
+
+  return { supabase, caregiver, sessionId: session.session_id as string };
 }
 
 /**
- * 로그인 + caregiver 연결을 강제한다. 조건 불충족 시 CaregiverAuthError를 던진다.
- * 페이지(Server Component)에서는 catch 후 redirect(), Route Handler에서는
- * catch 후 NextResponse.json으로 변환해서 사용한다.
+ * Route Handler(API)에서 사용한다. 세션이 없으면 CaregiverAuthError(401)를
+ * 던진다.
  */
-export async function requireCaregiver() {
+export async function requireCaregiverSession() {
   const session = await getCaregiverSession();
 
   if (!session) {
@@ -55,43 +84,32 @@ export async function requireCaregiver() {
 }
 
 /**
- * 페이지(Server Component)에서 사용한다. caregiver 연결이 없으면
- * /caregiver-login으로 리다이렉트한다("최근 등록한 사례 보기" 등).
+ * 페이지(Server Component)에서 사용한다. 세션이 없으면
+ * /caregiver-login?next=... 로 리다이렉트한다.
  */
-export async function requireCaregiverPage() {
+export async function requireCaregiverPage(nextPath?: string) {
   const session = await getCaregiverSession();
 
   if (!session) {
-    redirect("/caregiver-login");
+    const next = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
+    redirect(`/caregiver-login${next}`);
   }
 
   return session;
 }
 
 /**
- * Supabase Auth 로그인 여부만 확인한다(caregivers 연결 여부는 확인하지 않음).
- * 최초 등록/가족간병인 참여처럼 아직 caregivers 행이 없는 시점에 사용한다.
- */
-export async function getAuthUser() {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { supabase, user };
-}
-
-/**
  * caseId에 대해 로그인한 caregiver가 "현재 간병인(is_current_caregiver=true,
- * status=활성)"인지 서버에서 검증한다. 클라이언트가 보낸 값은 신뢰하지 않는다.
+ * status=활성)"이고, 해당 사례가 아직 "입원중"인지 서버에서 검증한다.
+ * 간병종료된 사례는 세션이 유효해도 항상 거부한다. 클라이언트가 보낸 값은
+ * 신뢰하지 않는다.
  */
-export async function requireCurrentCaregiver(caseId: string) {
-  const { supabase, user, caregiver } = await requireCaregiver();
+export async function requireCurrentCaregiverSession(caseId: string) {
+  const { supabase, caregiver, sessionId } = await requireCaregiverSession();
 
   const { data: caseCaregiver } = await supabase
     .from("case_caregivers")
-    .select("*")
+    .select("*, cases (status)")
     .eq("case_id", caseId)
     .eq("caregiver_id", caregiver.caregiver_id)
     .eq("is_current_caregiver", true)
@@ -105,13 +123,21 @@ export async function requireCurrentCaregiver(caseId: string) {
     );
   }
 
-  return { supabase, user, caregiver, caseCaregiver };
+  const caseStatus = Array.isArray(caseCaregiver.cases)
+    ? caseCaregiver.cases[0]?.status
+    : caseCaregiver.cases?.status;
+
+  if (caseStatus !== "입원중") {
+    throw new CaregiverAuthError("간병이 종료된 사례입니다.", 400);
+  }
+
+  return { supabase, caregiver, caseCaregiver, sessionId };
 }
 
 /**
  * 화면 표시용 소프트 체크. 권한 판단의 근거로 쓰지 않고, UI 상태
- * (버튼 활성화, 안내 문구)를 결정하는 용도로만 사용한다.
- * 실제 저장/변경/종료는 항상 requireCurrentCaregiver()를 통해 서버에서 재검증한다.
+ * (버튼 활성화, 안내 문구)를 결정하는 용도로만 사용한다. 실제 저장/변경/
+ * 종료는 항상 requireCurrentCaregiverSession()을 통해 서버에서 재검증한다.
  */
 export async function getCurrentCaregiverStatus(caseId: string) {
   const session = await getCaregiverSession();
@@ -122,18 +148,27 @@ export async function getCurrentCaregiverStatus(caseId: string) {
 
   const { supabase, caregiver } = session;
 
-  const { data: caseCaregiver } = await supabase
+  const { data: caseCaregiverData } = await supabase
     .from("case_caregivers")
-    .select("case_caregiver_id")
+    .select("case_caregiver_id, cases (status)")
     .eq("case_id", caseId)
     .eq("caregiver_id", caregiver.caregiver_id)
     .eq("is_current_caregiver", true)
     .eq("status", "활성")
     .maybeSingle();
 
+  // Supabase가 다대일 관계(cases)를 배열로 추론하지만 실제로는 단일 객체다.
+  const caseCaregiver = caseCaregiverData as unknown as
+    | { case_caregiver_id: string; cases: { status: string } | { status: string }[] | null }
+    | null;
+
+  const caseStatus = Array.isArray(caseCaregiver?.cases)
+    ? caseCaregiver?.cases[0]?.status
+    : caseCaregiver?.cases?.status;
+
   return {
     loggedIn: true,
-    isCurrent: Boolean(caseCaregiver),
+    isCurrent: Boolean(caseCaregiver) && caseStatus === "입원중",
     caregiverName: caregiver.caregiver_name as string | null,
   };
 }

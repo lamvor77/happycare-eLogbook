@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiver } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 
 type LocationStatus = "checked" | "unavailable";
 
@@ -25,11 +26,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!isSameOriginRequest(request)) {
+    return sameOriginErrorResponse();
+  }
+
   const { id: caseId } = await params;
 
   let auth;
   try {
-    auth = await requireCurrentCaregiver(caseId);
+    auth = await requireCurrentCaregiverSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

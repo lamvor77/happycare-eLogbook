@@ -1,5 +1,6 @@
 /**
- * 한국 휴대폰번호를 Supabase Phone Auth가 요구하는 E.164 형식으로 정규화한다.
+ * 한국 휴대폰번호를 E.164 형식으로 정규화한다. Solapi 발송(lib/solapi.ts)과
+ * OTP/세션 조회(caregivers.phone_normalized 매칭)에 공통으로 사용한다.
  * 예: "010-1234-5678" / "01012345678" -> "+821012345678"
  */
 export function toE164(raw: string): string {

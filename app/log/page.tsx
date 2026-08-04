@@ -12,9 +12,7 @@ export default async function LogPage({
   }
 
   // 개인정보 최소화: 이 화면은 로그인 없이 접근 가능하므로 병원의
-  // 최소 식별 정보만 조회한다. 환자 목록은 더 이상 이 화면에서 보여주지
-  // 않는다(누구나 QR만 스캔하면 병원 내 전체 입원 환자명을 볼 수 있었던
-  // 이전 구조의 개인정보 노출 문제를 제거하기 위함).
+  // 최소 식별 정보만 조회한다. 환자 목록은 이 화면에서 보여주지 않는다.
   let query = supabase
     .from("hospitals")
     .select("hospital_id, hospital_name, hospital_address, status");
@@ -35,9 +33,8 @@ export default async function LogPage({
     );
   }
 
-  const registerHref = q
-    ? `/case-register?q=${q}`
-    : `/case-register?h=${h}`;
+  const hospitalQuery = q ? `q=${q}` : `h=${h}`;
+  const registerHref = `/case-register?${hospitalQuery}`;
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -58,22 +55,29 @@ export default async function LogPage({
 
         <div className="bg-white rounded-lg shadow p-5 space-y-3">
           <p className="text-sm text-gray-600">
-            이미 등록된 간병인이라면 로그인 후 본인의 사례만 확인할 수
-            있습니다. 처음 방문하셨다면 최초 등록을 진행해주세요.
+            아래 버튼을 눌러 진행해주세요. QR을 스캔했다고 해서 자동으로
+            간병일지 화면으로 이동하지 않습니다.
           </p>
 
           <a
-            href="/caregiver-login"
-            className="block text-center bg-gray-700 text-white p-4 rounded-lg font-bold"
+            href="/my-cases"
+            className="block text-center bg-blue-600 text-white p-4 rounded-lg font-bold"
           >
-            간병인 로그인
+            간병일지 작성
           </a>
 
           <a
             href={registerHref}
-            className="block text-center bg-blue-600 text-white p-4 rounded-lg font-bold"
+            className="block text-center bg-gray-700 text-white p-4 rounded-lg font-bold"
           >
             간병인 &amp; 환자 최초 등록
+          </a>
+
+          <a
+            href="/case-join"
+            className="block text-center bg-green-600 text-white p-4 rounded-lg font-bold"
+          >
+            가족간병인 추가
           </a>
         </div>
       </div>

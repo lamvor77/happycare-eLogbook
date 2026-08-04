@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiver } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { revokeAllSessionsForCaregiver } from "@/lib/caregiver-session";
+import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!isSameOriginRequest(request)) {
+    return sameOriginErrorResponse();
+  }
+
   const { id: caseId } = await params;
 
   let auth;
   try {
-    auth = await requireCurrentCaregiver(caseId);
+    auth = await requireCurrentCaregiverSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -59,6 +65,20 @@ export async function POST(
 
   if (historyError) {
     console.error("case_history insert 실패:", historyError);
+  }
+
+  // 이 caregiver가 다른 입원중 사례에도 연결되어 있으면 세션은 유지한다.
+  // 다른 활성 사례가 전혀 없을 때만 세션을 해제한다.
+  const { data: otherActiveLinks } = await supabase
+    .from("case_caregivers")
+    .select("case_id, cases!inner(status)")
+    .eq("caregiver_id", caregiver.caregiver_id)
+    .eq("status", "활성")
+    .eq("cases.status", "입원중")
+    .neq("case_id", caseId);
+
+  if (!otherActiveLinks || otherActiveLinks.length === 0) {
+    await revokeAllSessionsForCaregiver(caregiver.caregiver_id);
   }
 
   return NextResponse.json({ ok: true });

@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireCaregiverPage } from "@/lib/caregiver-auth";
+import CaregiverLogoutButton from "./CaregiverLogoutButton";
 
 interface MyCaseLink {
   case_caregiver_id: string;
@@ -16,7 +18,7 @@ interface MyCaseLink {
 }
 
 export default async function MyCasesPage() {
-  const { supabase, caregiver } = await requireCaregiverPage();
+  const { supabase, caregiver } = await requireCaregiverPage("/my-cases");
 
   const { data: linksData } = await supabase
     .from("case_caregivers")
@@ -40,22 +42,33 @@ export default async function MyCasesPage() {
     .eq("status", "활성");
 
   // Supabase가 다대일 관계(cases)를 배열로 추론하지만 실제로는 단일
-  // 객체다(app/cases/[id]/care-logs/page.tsx의 hospitals 케이스와 동일한
-  // 이유). 최소 타입으로 명시적으로 재단언한다.
-  const links = linksData as unknown as MyCaseLink[] | null;
+  // 객체다. 최소 타입으로 명시적으로 재단언한다.
+  const links = (linksData as unknown as MyCaseLink[] | null) || [];
+
+  const admittedLinks = links.filter((link) => link.cases?.status === "입원중");
+
+  // 연결된 "입원중" 사례가 정확히 1개면 QR의 [간병일지 작성] 버튼에서
+  // 바로 작성 화면으로 넘어간다(구현 E 요구사항).
+  if (admittedLinks.length === 1 && admittedLinks[0].cases) {
+    redirect(`/case-care-log/${admittedLinks[0].cases.case_id}`);
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto space-y-4">
-        <div className="bg-white rounded-lg shadow p-5">
-          <h1 className="text-2xl font-bold">내 사례</h1>
-          <p className="text-gray-600 mt-2">
-            {caregiver.caregiver_name}님과 연결된 사례입니다.
-          </p>
+        <div className="bg-white rounded-lg shadow p-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">내 사례</h1>
+            <p className="text-gray-600 mt-2">
+              {caregiver.caregiver_name}님과 연결된 사례입니다.
+            </p>
+          </div>
+
+          <CaregiverLogoutButton />
         </div>
 
-        {links && links.length > 0 ? (
-          links.map((link: MyCaseLink) => (
+        {links.length > 0 ? (
+          links.map((link) => (
             <a
               key={link.case_caregiver_id}
               href={`/cases/${link.cases?.case_id}`}

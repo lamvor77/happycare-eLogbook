@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiver } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 
 interface ChangeCaregiverRequestBody {
   case_caregiver_id?: string;
@@ -9,11 +10,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!isSameOriginRequest(request)) {
+    return sameOriginErrorResponse();
+  }
+
   const { id: caseId } = await params;
 
   let auth;
   try {
-    auth = await requireCurrentCaregiver(caseId);
+    auth = await requireCurrentCaregiverSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -55,8 +60,9 @@ export async function POST(
     );
   }
 
-  const { error: rpcError } = await supabase.rpc("set_current_caregiver", {
+  const { error: rpcError } = await supabase.rpc("set_current_caregiver_v2", {
     p_case_id: caseId,
+    p_requesting_caregiver_id: caregiver.caregiver_id,
     p_new_case_caregiver_id: targetId,
   });
 

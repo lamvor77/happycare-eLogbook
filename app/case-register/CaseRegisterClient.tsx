@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { toE164 } from "@/lib/phone";
 
 type Step = "phone" | "code" | "form";
@@ -62,12 +61,12 @@ export default function CaseRegisterClient() {
     }
 
     async function checkSession() {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const response = await fetch("/api/caregiver-auth/session");
+      const body = await response.json().catch(() => null);
 
-      if (session) {
+      if (body?.loggedIn) {
+        // 이미 유효한 세션이 있으면 휴대폰 인증을 다시 요구하지 않는다
+        // (간병종료 시까지 세션을 유지하는 정책).
         setStep("form");
       }
 
@@ -87,19 +86,18 @@ export default function CaseRegisterClient() {
     setSaving(true);
     setMessage("");
 
-    const supabase = createSupabaseBrowserClient();
-
-    // 최초 등록은 신규 가입 성격이므로 shouldCreateUser: true를 쓴다
-    // (로그인 화면 app/caregiver-login은 기존 계정만 허용하도록 false).
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: toE164(phone),
-      options: { shouldCreateUser: true },
+    const response = await fetch("/api/caregiver-auth/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: toE164(phone) }),
     });
 
     setSaving(false);
 
-    if (error) {
-      setMessage("인증코드 전송에 실패했습니다. 휴대폰번호를 확인해주세요.");
+    const body = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setMessage(body?.error || "인증코드 전송에 실패했습니다.");
       return;
     }
 
@@ -116,18 +114,18 @@ export default function CaseRegisterClient() {
     setSaving(true);
     setMessage("");
 
-    const supabase = createSupabaseBrowserClient();
-
-    const { error } = await supabase.auth.verifyOtp({
-      phone: toE164(phone),
-      token: code.trim(),
-      type: "sms",
+    const response = await fetch("/api/caregiver-auth/verify-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: toE164(phone), code: code.trim() }),
     });
+
+    const body = await response.json().catch(() => null);
 
     setSaving(false);
 
-    if (error) {
-      setMessage("인증코드가 올바르지 않거나 만료되었습니다.");
+    if (!response.ok) {
+      setMessage(body?.error || "인증코드가 올바르지 않거나 만료되었습니다.");
       return;
     }
 
@@ -142,7 +140,7 @@ export default function CaseRegisterClient() {
       return;
     }
 
-    if (!caregiverName || !caregiverPhone || !patientName || !relationship) {
+    if (!patientName || !relationship) {
       setMessage("필수 정보를 입력해주세요.");
       return;
     }
@@ -161,8 +159,8 @@ export default function CaseRegisterClient() {
       body: JSON.stringify({
         hospital_token: hospitalToken,
         hospital_code: hospitalCode,
-        caregiver_name: caregiverName,
-        caregiver_phone: toE164(caregiverPhone),
+        caregiver_name: caregiverName || undefined,
+        caregiver_phone: caregiverPhone ? toE164(caregiverPhone) : undefined,
         resident_number_front7: residentNumberFront7,
         patient_name: patientName,
         patient_birth_date: patientBirthDate || null,
