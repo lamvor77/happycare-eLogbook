@@ -140,11 +140,11 @@ export default function CaseJoinClient() {
   }
 
   if (checkingSession) {
-    return <main className="p-8">확인 중입니다...</main>;
+    return <main className="p-8 text-gray-900">확인 중입니다...</main>;
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4">
+    <main className="min-h-screen bg-gray-50 p-4 text-gray-900">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 mt-10 space-y-4">
         <h1 className="text-2xl font-bold">가족간병인 참여</h1>
 

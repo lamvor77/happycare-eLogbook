@@ -202,11 +202,11 @@ export default function CaseRegisterClient() {
   }
 
   if (checkingSession) {
-    return <main className="p-8">확인 중입니다...</main>;
+    return <main className="p-8 text-gray-900">확인 중입니다...</main>;
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4">
+    <main className="min-h-screen bg-gray-50 p-4 text-gray-900">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 space-y-5">
         <h1 className="text-2xl font-bold">간병인 &amp; 환자 등록</h1>
         <p className="text-sm text-gray-500">
