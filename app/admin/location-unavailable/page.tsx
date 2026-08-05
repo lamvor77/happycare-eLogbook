@@ -47,6 +47,7 @@ export default async function LocationUnavailablePage() {
       )
     `)
     .eq("location_status", "unavailable")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {

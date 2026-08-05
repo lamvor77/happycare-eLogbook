@@ -20,9 +20,14 @@ export default async function AdminPage() {
     .select("*", { count: "exact", head: true })
     .eq("status", "입원중");
 
+  // 삭제된(soft delete) 간병일지는 일반 운영 통계에 포함하지 않는다 —
+  // 아래 care_logs 집계에는 모두 deleted_at is null 조건을 붙인다. 삭제된
+  // 일지 자체를 확인하려면 사례별 "관리자 간병일지 관리" 화면의 "삭제된
+  // 일지 포함" 필터를 사용한다.
   const { count: careLogCount } = await supabase
     .from("care_logs")
-    .select("*", { count: "exact", head: true });
+    .select("*", { count: "exact", head: true })
+    .is("deleted_at", null);
 
   const { count: caregiverCount } = await supabase
     .from("caregivers")
@@ -33,23 +38,27 @@ export default async function AdminPage() {
   const { count: todayCareLogCount } = await supabase
     .from("care_logs")
     .select("*", { count: "exact", head: true })
-    .eq("care_date", today);
+    .eq("care_date", today)
+    .is("deleted_at", null);
 
   const { count: checkedLocationCount } = await supabase
     .from("care_logs")
     .select("*", { count: "exact", head: true })
-    .eq("location_status", "checked");
+    .eq("location_status", "checked")
+    .is("deleted_at", null);
 
   const { count: unavailableLocationCount } = await supabase
     .from("care_logs")
     .select("*", { count: "exact", head: true })
-    .eq("location_status", "unavailable");
+    .eq("location_status", "unavailable")
+    .is("deleted_at", null);
 
   // 기존 데이터 중 위치 확인이 선택사항이던 시기의 기록
   const { count: legacyNotUsedCount } = await supabase
     .from("care_logs")
     .select("*", { count: "exact", head: true })
-    .eq("location_status", "not_used");
+    .eq("location_status", "not_used")
+    .is("deleted_at", null);
 
   const totalLogs = careLogCount || 0;
   const checkedLogs = checkedLocationCount || 0;
@@ -82,6 +91,7 @@ export default async function AdminPage() {
         case_no
       )
     `)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(10);
 

@@ -5,7 +5,7 @@ interface HospitalWithCases extends Hospital {
   cases?: {
     case_id: string;
     status: string;
-    care_logs?: { care_date: string }[];
+    care_logs?: { care_date: string; deleted_at: string | null }[];
   }[];
 }
 
@@ -20,7 +20,8 @@ export default async function AdminHospitalsPage() {
         case_id,
         status,
         care_logs (
-          care_date
+          care_date,
+          deleted_at
         )
       )
     `)
@@ -57,8 +58,11 @@ export default async function AdminHospitalsPage() {
               (item) => item.status === "간병종료"
             );
 
+            // 관리자가 삭제한 일지는 "오늘 작성됨"으로 치지 않는다.
             const todayWritten = activeCases.filter((item) =>
-              item.care_logs?.some((log) => log.care_date === today)
+              item.care_logs?.some(
+                (log) => log.care_date === today && !log.deleted_at
+              )
             );
 
             const todayMissingCount =

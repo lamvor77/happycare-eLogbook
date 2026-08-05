@@ -78,6 +78,9 @@ export interface CareLog {
   location_checked_at: string | null;
   location_failure_reason: string | null;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  delete_reason: string | null;
   cases?:
     | (Pick<CaseRecord, "case_id" | "case_no" | "patient_name" | "room_no"> & {
         hospitals?: Pick<Hospital, "hospital_name"> | null;
