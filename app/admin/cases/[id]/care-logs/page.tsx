@@ -45,7 +45,20 @@ export default async function AdminCaseCareLogsPage({
     .order("care_date", { ascending: false })
     .order("created_at", { ascending: false });
 
+  console.error(logsError);
+
   if (logsError) {
+    console.error(
+      "간병일지 조회 실패:",
+      logsError.message,
+      "code:",
+      logsError.code,
+      "details:",
+      logsError.details,
+      "hint:",
+      logsError.hint
+    );
+
     return <main className="p-8">간병일지 조회 중 오류가 발생했습니다.</main>;
   }
 
