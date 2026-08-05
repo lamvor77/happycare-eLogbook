@@ -76,6 +76,19 @@ export default async function CaseDetailPage({
     .eq("case_id", id)
     .order("care_date", { ascending: false });
 
+  // CaseHistory는 이 페이지가 이미 통과한 requireCaseMemberSession() 권한
+  // 검증과 service_role 클라이언트를 그대로 재사용한다 — 별도로 다시
+  // 세션을 검증하지 않고, 이 조회도 항상 위 권한 확인 "이후"에만 실행된다.
+  const { data: historyData, error: historyError } = await supabase
+    .from("case_history")
+    .select("history_id, case_id, history_type, title, action, description, actor, created_at")
+    .eq("case_id", id)
+    .order("created_at", { ascending: false });
+
+  if (historyError) {
+    console.error("case_history 조회 실패:", historyError.message);
+  }
+
   const currentCaregiver = caseData.case_caregivers?.find(
     (item: CaseCaregiver) => item.is_current_caregiver
   );
@@ -96,7 +109,7 @@ export default async function CaseDetailPage({
             {caseData.patient_name}
           </h1>
 
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-700 mb-4">
             상태: {caseData.status}
           </p>
 
@@ -111,19 +124,19 @@ export default async function CaseDetailPage({
 
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-white border rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">작성일수</p>
+            <p className="text-xs text-gray-700">작성일수</p>
             <p className="text-xl font-bold">{careLogs?.length || 0}</p>
           </div>
 
           <div className="bg-white border rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">참여가족</p>
+            <p className="text-xs text-gray-700">참여가족</p>
             <p className="text-xl font-bold">
               {caseData.case_caregivers?.length || 0}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">현재간병인</p>
+            <p className="text-xs text-gray-700">현재간병인</p>
             <p className="font-bold text-sm">
               {currentCaregiver?.caregivers?.caregiver_name || "-"}
             </p>
@@ -192,12 +205,12 @@ export default async function CaseDetailPage({
             ))}
 
             {(!careLogs || careLogs.length === 0) && (
-              <p className="text-gray-500">아직 작성된 간병일지가 없습니다.</p>
+              <p className="text-gray-700">아직 작성된 간병일지가 없습니다.</p>
             )}
           </div>
         </div>
 
-          <CaseHistory caseId={caseData.case_id} /> 
+          <CaseHistory history={historyData} loadError={Boolean(historyError)} />
 
         <div className="grid grid-cols-1 gap-2">
         <a
