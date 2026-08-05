@@ -26,16 +26,11 @@ export default async function AdminCaseCareLogsPage({
     return <main className="p-8">사례 정보를 찾을 수 없습니다.</main>;
   }
 
-  let logsQuery = supabase
-    .from("care_logs")
-    .select(`
-      *,
-      caregivers (
-        caregiver_name,
-        phone
-      )
-    `)
-    .eq("case_id", id);
+  // care_logs.caregiver_id는 DB에 caregivers를 향한 FK가 없어 PostgREST가
+  // 관계를 추론하지 못한다(PGRST200). caregivers를 중첩 select하지 않고
+  // care_logs만 조회한다 — 작성자 이름은 작성 시점에 이미 이 행 자체의
+  // writer_name/signature_name에 저장되어 있으므로 별도 조회도 필요 없다.
+  let logsQuery = supabase.from("care_logs").select("*").eq("case_id", id);
 
   if (!showDeleted) {
     logsQuery = logsQuery.is("deleted_at", null);
@@ -140,7 +135,7 @@ export default async function AdminCaseCareLogsPage({
                     <div>
                       <p className="font-bold text-lg">{log.care_date}</p>
                       <p className="text-sm text-gray-700">
-                        작성자: {log.writer_name || log.signature_name || log.caregivers?.caregiver_name || "-"}
+                        작성자: {log.writer_name || log.signature_name || "-"}
                         {log.relationship ? ` (${log.relationship})` : ""}
                       </p>
                       <p className="text-sm text-gray-700">

@@ -72,25 +72,34 @@ export default async function CaseCareLogsPage({
     );
   }
 
-  // 관리자가 삭제한 간병일지는 이 조회 화면에 노출하지 않는다.
+  // care_logs.caregiver_id는 DB에 caregivers를 향한 FK가 없어 PostgREST가
+  // 관계를 추론하지 못한다(PGRST200). caregivers를 중첩 select하지 않는다 —
+  // 작성자 이름은 작성 시점에 이미 이 행 자체의 writer_name/signature_name에
+  // 저장되어 있으므로 별도 조회도 필요 없다. 관리자가 삭제한 간병일지는 이
+  // 조회 화면에 노출하지 않는다.
   const { data: logs, error } = await supabase
     .from("care_logs")
-    .select(`
-      *,
-      caregivers (
-        caregiver_name,
-        phone
-      )
-    `)
+    .select("*")
     .eq("case_id", id)
     .is("deleted_at", null)
     .order("care_date", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error(
+      "간병일지 조회 실패:",
+      error.message,
+      "code:",
+      error.code,
+      "details:",
+      error.details,
+      "hint:",
+      error.hint
+    );
+
     return (
       <main className="p-8">
-        간병일지 조회 오류: {error.message}
+        간병일지 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
       </main>
     );
   }
@@ -137,10 +146,7 @@ export default async function CaseCareLogsPage({
                 <div className="mb-4 rounded border bg-gray-50 p-3 text-sm">
                   <p>
                     작성자:{" "}
-                    {log.writer_name ||
-                      log.signature_name ||
-                      log.caregivers?.caregiver_name ||
-                      "-"}
+                    {log.writer_name || log.signature_name || "-"}
                   </p>
 
                   <p>

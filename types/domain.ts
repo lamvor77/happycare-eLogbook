@@ -86,7 +86,6 @@ export interface CareLog {
         hospitals?: Pick<Hospital, "hospital_name"> | null;
       })
     | null;
-  caregivers?: Caregiver | null;
 }
 
 export interface CaseHistoryEntry {

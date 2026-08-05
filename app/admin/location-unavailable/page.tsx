@@ -28,6 +28,11 @@ function getLocationFailureLabel(reason?: string | null) {
 export default async function LocationUnavailablePage() {
   const { supabase } = await requireAdmin();
 
+  // care_logs.caregiver_id는 DB에 caregivers를 향한 FK가 없어 PostgREST가
+  // 관계를 추론하지 못한다(PGRST200) — cases(...)는 실제 FK가 있는 정상
+  // 관계라 그대로 둔다. 이 화면은 위치 미기록 건을 관리자가 직접 연락해
+  // 확인해야 할 수 있어 전화번호가 실제로 필요하므로, caregivers는 embed
+  // 대신 caregiver_id 목록으로 별도 조회한 뒤 Map으로 결합한다.
   const { data: logs, error } = await supabase
     .from("care_logs")
     .select(`
@@ -40,10 +45,6 @@ export default async function LocationUnavailablePage() {
         hospitals (
           hospital_name
         )
-      ),
-      caregivers (
-        caregiver_name,
-        phone
       )
     `)
     .eq("location_status", "unavailable")
@@ -51,11 +52,52 @@ export default async function LocationUnavailablePage() {
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error(
+      "위치 미기록 간병일지 조회 실패:",
+      error.message,
+      "code:",
+      error.code,
+      "details:",
+      error.details,
+      "hint:",
+      error.hint
+    );
+
     return (
       <main className="p-8">
-        위치 미기록 조회 오류: {error.message}
+        위치 미기록 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
       </main>
     );
+  }
+
+  const caregiverIds = Array.from(
+    new Set((logs || []).map((log) => log.caregiver_id).filter(Boolean))
+  );
+
+  const caregiverPhoneMap = new Map<string, string | null>();
+
+  if (caregiverIds.length > 0) {
+    const { data: caregiversData, error: caregiversError } = await supabase
+      .from("caregivers")
+      .select("caregiver_id, phone")
+      .in("caregiver_id", caregiverIds);
+
+    if (caregiversError) {
+      console.error(
+        "간병인 연락처 조회 실패:",
+        caregiversError.message,
+        "code:",
+        caregiversError.code,
+        "details:",
+        caregiversError.details,
+        "hint:",
+        caregiversError.hint
+      );
+    } else {
+      for (const caregiver of caregiversData || []) {
+        caregiverPhoneMap.set(caregiver.caregiver_id, caregiver.phone);
+      }
+    }
   }
 
   return (
@@ -120,16 +162,13 @@ export default async function LocationUnavailablePage() {
 
                   <p>
                     작성자:{" "}
-                    {log.writer_name ||
-                      log.signature_name ||
-                      log.caregivers?.caregiver_name ||
-                      "-"}
+                    {log.writer_name || log.signature_name || "-"}
                   </p>
 
                   <p>관계: {log.relationship || "-"}</p>
 
                   <p>
-                    연락처: {log.caregivers?.phone || "-"}
+                    연락처: {caregiverPhoneMap.get(log.caregiver_id) || "-"}
                   </p>
                 </div>
 
