@@ -56,6 +56,7 @@ export default async function AdminCasePrintPage({
     );
   }
 
+  // 공식 문서이므로 관리자가 삭제한 간병일지는 기본적으로 출력하지 않는다.
   const { data: logs, error: logsError } = await supabase
     .from("care_logs")
     .select(`
@@ -66,6 +67,7 @@ export default async function AdminCasePrintPage({
       )
     `)
     .eq("case_id", id)
+    .is("deleted_at", null)
     .order("care_date", { ascending: true })
     .order("created_at", { ascending: true });
 

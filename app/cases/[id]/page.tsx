@@ -70,10 +70,13 @@ export default async function CaseDetailPage({
     return <main className="p-8">사례 정보를 찾을 수 없습니다.</main>;
   }
 
+  // 관리자가 삭제한 간병일지는 일반 화면(작성일수/최근 간병일지)에 노출하지
+  // 않는다.
   const { data: careLogs } = await supabase
     .from("care_logs")
     .select("*")
     .eq("case_id", id)
+    .is("deleted_at", null)
     .order("care_date", { ascending: false });
 
   // CaseHistory는 이 페이지가 이미 통과한 requireCaseMemberSession() 권한

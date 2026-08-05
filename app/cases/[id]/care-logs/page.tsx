@@ -72,6 +72,7 @@ export default async function CaseCareLogsPage({
     );
   }
 
+  // 관리자가 삭제한 간병일지는 이 조회 화면에 노출하지 않는다.
   const { data: logs, error } = await supabase
     .from("care_logs")
     .select(`
@@ -82,6 +83,7 @@ export default async function CaseCareLogsPage({
       )
     `)
     .eq("case_id", id)
+    .is("deleted_at", null)
     .order("care_date", { ascending: false })
     .order("created_at", { ascending: false });
 

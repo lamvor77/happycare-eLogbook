@@ -98,11 +98,14 @@ export async function POST(
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // 관리자가 오늘 일지를 삭제(soft delete)했다면 다시 작성할 수 있어야
+  // 하므로, 삭제된 행은 중복 작성 판정에서 제외한다.
   const { data: existingLogs, error: checkError } = await supabase
     .from("care_logs")
     .select("log_id")
     .eq("case_id", caseId)
-    .eq("care_date", today);
+    .eq("care_date", today)
+    .is("deleted_at", null);
 
   if (checkError) {
     return NextResponse.json({ error: "기존 기록 확인에 실패했습니다." }, { status: 500 });

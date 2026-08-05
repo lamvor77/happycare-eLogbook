@@ -121,6 +121,13 @@ export default async function AdminCasesPage({
               >
                 PDF 출력
               </a>
+
+              <a
+                href={`/admin/cases/${item.case_id}/care-logs`}
+                className="bg-gray-700 text-white px-3 py-2 rounded text-sm"
+              >
+                간병일지 관리
+              </a>
             </div>
           </div>
         ))}
