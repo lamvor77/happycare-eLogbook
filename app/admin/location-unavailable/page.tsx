@@ -176,7 +176,7 @@ export default async function LocationUnavailablePage() {
               </div>
             ))
           ) : (
-            <div className="rounded-lg border bg-white p-6 text-center text-gray-500">
+            <div className="rounded-lg border bg-white p-6 text-center text-gray-700">
               위치 미기록 간병일지가 없습니다.
             </div>
           )}

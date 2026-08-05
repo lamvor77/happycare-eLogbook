@@ -209,14 +209,14 @@ export default function CaseRegisterClient() {
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 space-y-5">
         <h1 className="text-2xl font-bold">간병인 &amp; 환자 등록</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-700">
           병원: {hospitalName || hospitalCode || "-"}
         </p>
 
         {step !== "form" && (
           <section>
             <h2 className="font-bold mb-3">휴대폰 인증</h2>
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-700 mb-3">
               등록을 진행하려면 먼저 휴대폰 인증이 필요합니다.
             </p>
 

@@ -18,7 +18,7 @@ export default function CaregiverLogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="text-sm text-gray-500 underline disabled:opacity-50"
+      className="text-sm text-gray-700 underline disabled:opacity-50"
     >
       {loading ? "로그아웃 중..." : "로그아웃"}
     </button>

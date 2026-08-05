@@ -95,7 +95,7 @@ export default function CaregiverLoginClient() {
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 mt-10">
         <h1 className="text-2xl font-bold mb-2">간병인 로그인</h1>
 
-        <p className="text-gray-500 mb-6">
+        <p className="text-gray-700 mb-6">
           등록된 휴대폰번호로 인증코드를 받아 로그인합니다.
         </p>
 
@@ -141,7 +141,7 @@ export default function CaregiverLoginClient() {
                 setCode("");
                 setMessage("");
               }}
-              className="w-full mt-2 text-sm text-gray-500 underline"
+              className="w-full mt-2 text-sm text-gray-700 underline"
             >
               휴대폰번호 다시 입력
             </button>

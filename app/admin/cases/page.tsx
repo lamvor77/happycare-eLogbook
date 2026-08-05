@@ -126,7 +126,7 @@ export default async function AdminCasesPage({
         ))}
 
         {(!cases || cases.length === 0) && (
-          <div className="bg-white border rounded-lg p-5 text-gray-500">
+          <div className="bg-white border rounded-lg p-5 text-gray-700">
             검색 결과가 없습니다.
           </div>
         )}

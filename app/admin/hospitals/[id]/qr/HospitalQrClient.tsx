@@ -59,7 +59,7 @@ export default function HospitalQrClient({
           환자정보는 QR에 저장되지 않습니다.
         </p>
 
-        <p className="text-xs break-all text-gray-500 mb-8">
+        <p className="text-xs break-all text-gray-700 mb-8">
           {qrUrl}
         </p>
 

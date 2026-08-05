@@ -90,7 +90,7 @@ export default async function AdminCasePrintPage({
           가족간병 통합 간병일지
         </h1>
 
-        <p className="mt-2 text-sm text-gray-500">
+        <p className="mt-2 text-sm text-gray-700">
           문서번호: {documentNo}
         </p>
       </header>
@@ -269,7 +269,7 @@ export default async function AdminCasePrintPage({
                 <tr>
                   <td
                     colSpan={14}
-                    className="border p-6 text-center text-gray-500"
+                    className="border p-6 text-center text-gray-700"
                   >
                     작성된 간병일지가 없습니다.
                   </td>

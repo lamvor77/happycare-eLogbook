@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
           관리자 로그인
         </h1>
 
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-gray-700 mb-6">
           등록된 관리자 이메일과 비밀번호를 입력해주세요.
         </p>
 

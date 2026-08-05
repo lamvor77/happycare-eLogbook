@@ -148,14 +148,14 @@ export default function CaseJoinClient() {
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6 mt-10 space-y-4">
         <h1 className="text-2xl font-bold">가족간병인 참여</h1>
 
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-700">
           가족코드를 입력하고 본인 정보를 등록해주세요.
         </p>
 
         {step !== "form" && (
           <section>
             <h2 className="font-bold mb-3">휴대폰 인증</h2>
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-700 mb-3">
               참여를 진행하려면 먼저 휴대폰 인증이 필요합니다.
             </p>
 

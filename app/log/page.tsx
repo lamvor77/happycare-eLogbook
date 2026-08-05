@@ -48,7 +48,7 @@ export default async function LogPage({
             {hospital.hospital_name}
           </p>
 
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-700 mt-1">
             {hospital.hospital_address || "-"}
           </p>
         </div>

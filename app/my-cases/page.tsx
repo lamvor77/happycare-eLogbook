@@ -91,7 +91,7 @@ export default async function MyCasesPage() {
             </a>
           ))
         ) : (
-          <div className="bg-white border rounded-lg p-5 text-gray-500 text-center space-y-3">
+          <div className="bg-white border rounded-lg p-5 text-gray-700 text-center space-y-3">
             <p>연결된 사례가 없습니다.</p>
             <p className="text-sm">
               병원 QR을 스캔해 최초 등록을 하거나, 가족에게 받은 가족코드로

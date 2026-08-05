@@ -94,7 +94,7 @@ export default async function AdminPage() {
           </h1>
 
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{email}</span>
+            <span className="text-sm text-gray-700">{email}</span>
             <LogoutButton />
           </div>
         </div>
@@ -124,56 +124,56 @@ export default async function AdminPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">전체 사례</p>
+            <p className="text-sm text-gray-700">전체 사례</p>
             <p className="text-3xl font-bold">
               {caseCount || 0}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">입원중 사례</p>
+            <p className="text-sm text-gray-700">입원중 사례</p>
             <p className="text-3xl font-bold">
               {activeCaseCount || 0}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">간병일지</p>
+            <p className="text-sm text-gray-700">간병일지</p>
             <p className="text-3xl font-bold">
               {totalLogs}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">가족간병인</p>
+            <p className="text-sm text-gray-700">가족간병인</p>
             <p className="text-3xl font-bold">
               {caregiverCount || 0}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">오늘 작성</p>
+            <p className="text-sm text-gray-700">오늘 작성</p>
             <p className="text-3xl font-bold">
               {todayCareLogCount || 0}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">위치 확인 완료</p>
+            <p className="text-sm text-gray-700">위치 확인 완료</p>
             <p className="text-3xl font-bold">
               {checkedLogs}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">위치 미기록</p>
+            <p className="text-sm text-gray-700">위치 미기록</p>
             <p className="text-3xl font-bold">
               {unavailableLogs}
             </p>
           </div>
 
           <div className="bg-white border rounded-lg p-5">
-            <p className="text-sm text-gray-500">위치 확인률</p>
+            <p className="text-sm text-gray-700">위치 확인률</p>
             <p className="text-3xl font-bold">
               {locationRate}%
             </p>
@@ -245,7 +245,7 @@ export default async function AdminPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-700">
                   등록된 사례가 없습니다.
                 </p>
               )}
@@ -334,7 +334,7 @@ export default async function AdminPage() {
                   );
                 })
               ) : (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-700">
                   작성된 간병일지가 없습니다.
                 </p>
               )}

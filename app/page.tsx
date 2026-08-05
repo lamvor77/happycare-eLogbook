@@ -22,7 +22,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-700">
           병원 QR을 스캔해 주세요.
         </p>
       </div>

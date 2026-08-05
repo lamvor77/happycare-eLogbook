@@ -124,7 +124,7 @@ export default async function CaseCareLogsPage({
                     {log.care_date}
                   </p>
 
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-700">
                     작성시간:{" "}
                     {log.created_at
                       ? new Date(log.created_at).toLocaleString("ko-KR")
@@ -191,11 +191,11 @@ export default async function CaseCareLogsPage({
                           : "-"}
                       </p>
 
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-gray-700">
                         위도: {log.latitude ?? "-"}
                       </p>
 
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-700">
                         경도: {log.longitude ?? "-"}
                       </p>
                     </>
@@ -225,7 +225,7 @@ export default async function CaseCareLogsPage({
             );
           })
         ) : (
-          <div className="bg-white border rounded-lg p-5 text-gray-500">
+          <div className="bg-white border rounded-lg p-5 text-gray-700">
             아직 작성된 간병일지가 없습니다.
           </div>
         )}

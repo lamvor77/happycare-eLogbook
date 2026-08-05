@@ -91,22 +91,22 @@ export default async function AdminHospitalsPage() {
 
                 <div className="grid grid-cols-4 gap-2 my-4 text-center text-sm">
                   <div className="border rounded p-2">
-                    <p className="text-gray-500">입원중</p>
+                    <p className="text-gray-700">입원중</p>
                     <p className="font-bold">{activeCases.length}</p>
                   </div>
 
                   <div className="border rounded p-2">
-                    <p className="text-gray-500">간병종료</p>
+                    <p className="text-gray-700">간병종료</p>
                     <p className="font-bold">{endedCases.length}</p>
                   </div>
 
                   <div className="border rounded p-2">
-                    <p className="text-gray-500">오늘작성</p>
+                    <p className="text-gray-700">오늘작성</p>
                     <p className="font-bold">{todayWritten.length}</p>
                   </div>
 
                   <div className="border rounded p-2">
-                    <p className="text-gray-500">미작성</p>
+                    <p className="text-gray-700">미작성</p>
                     <p className="font-bold">{todayMissingCount}</p>
                   </div>
                 </div>
@@ -138,7 +138,7 @@ export default async function AdminHospitalsPage() {
           })}
 
           {(!hospitals || hospitals.length === 0) && (
-            <div className="bg-white border rounded-lg p-5 text-gray-500">
+            <div className="bg-white border rounded-lg p-5 text-gray-700">
               등록된 병원이 없습니다.
             </div>
           )}
