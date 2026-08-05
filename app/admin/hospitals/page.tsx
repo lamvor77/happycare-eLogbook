@@ -120,7 +120,7 @@ export default async function AdminHospitalsPage() {
                   </a>
 
                   <a
-                    href={`/admin/hospitals/${hospital.hospital_id}/edit`}
+                    href={`/admin/hospitals/${hospital.hospital_id}/qr/edit`}
                     className="bg-gray-700 text-white px-3 py-2 rounded text-sm"
                   >
                     수정
