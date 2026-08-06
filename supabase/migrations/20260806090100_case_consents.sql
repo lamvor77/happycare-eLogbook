@@ -21,6 +21,18 @@
 -- app/case-join(가족간병인 추가)은 이번 작업 범위에 포함되지 않아 계속
 -- join_case_v2(주민등록번호 앞 7자리만, 선택)를 그대로 사용한다 —
 -- docs/registration-field-mapping.md에 이 차이를 명시해 둔다.
+--
+-- *** 기존 사례 재사용 분기 보완(후속 수정) ***
+-- 최초 구현은 "동일 병원+환자명+생년월일의 입원중 사례가 이미 있으면"
+-- caregiver/case_caregiver/case_consents 생성을 전혀 시도하지 않고 바로
+-- 반환했다 — 그 결과 OTP 인증과 등록 제출은 성공했는데 case_caregivers
+-- 연결이나 case_consents가 누락되어 "내 사례"에 표시되지 않는 상태가
+-- 생길 수 있었다. 지금은 사례를 재사용하는 경우에도 (1) 이 caregiver가
+-- 이미 연결되어 있는지 확인하고 없으면 연결하되, 현재 간병인이 이미
+-- 있으면 새 연결은 is_current_caregiver=false로, 없으면 true로 만들고
+-- (기존 현재 간병인은 절대 자동 교체하지 않음), (2) 동의 기록이 없으면
+-- 추가하고, (3) case_history에 민감정보 없이 남긴다. 환자/보험/병원 등
+-- cases의 기존 컬럼은 이 분기에서 절대 UPDATE하지 않는다.
 -- ============================================================================
 
 
@@ -120,6 +132,12 @@ declare
   v_case_no text;
   v_family_code text;
   v_case_id uuid;
+  v_existing_link_id uuid;
+  v_has_current_caregiver boolean;
+  v_consent_exists boolean;
+  v_link_created boolean;
+  v_consent_created boolean;
+  v_history_description text;
 begin
   if p_privacy_agreed is not true then
     raise exception 'privacy_not_agreed' using errcode = '22023';
@@ -155,28 +173,10 @@ begin
     raise exception 'invalid_hospital' using errcode = '22023';
   end if;
 
-  -- 동일 병원 + 환자명 + 생년월일 기준으로 입원중인 기존 사례가 있으면 재사용.
-  select cases.case_id, cases.case_no, cases.family_code
-    into v_existing_case_id, v_existing_case_no, v_existing_family_code
-  from cases
-  where cases.hospital_id = p_hospital_id
-    and cases.patient_name = p_patient_name
-    and cases.patient_birth_date is not distinct from p_patient_birth_date
-    and cases.status = '입원중'
-  limit 1;
-
-  if v_existing_case_id is not null then
-    select caregiver_id into v_caregiver_id
-    from caregivers
-    where phone_normalized = p_caregiver_phone_normalized;
-
-    return query select v_existing_case_id, v_existing_case_no, v_existing_family_code, true, v_caregiver_id;
-    return;
-  end if;
-
-  -- caregiver 재사용(phone_normalized 기준) 또는 신규 생성. register_case_v2와
+  -- caregiver 조회/생성을 사례 재사용 여부와 무관하게 먼저 확정한다(둘 중
+  -- 어느 분기로 가든 v_caregiver_id가 필요하기 때문). register_case_v2와
   -- 동일하게, 이미 존재하는 caregiver라면 주민등록번호 관련 컬럼을 덮어쓰지
-  -- 않는다(재방문 등록 시 최초 등록값을 유지 — v2의 기존 동작과 일관).
+  -- 않는다(재방문 등록 시 최초 등록값을 유지).
   select caregivers.caregiver_id into v_caregiver_id
   from caregivers
   where caregivers.phone_normalized = p_caregiver_phone_normalized;
@@ -209,6 +209,107 @@ begin
       now()
     )
     returning caregiver_id into v_caregiver_id;
+  end if;
+
+  -- 동일 병원 + 환자명 + 생년월일 기준으로 입원중인 기존 사례가 있으면 재사용.
+  select cases.case_id, cases.case_no, cases.family_code
+    into v_existing_case_id, v_existing_case_no, v_existing_family_code
+  from cases
+  where cases.hospital_id = p_hospital_id
+    and cases.patient_name = p_patient_name
+    and cases.patient_birth_date is not distinct from p_patient_birth_date
+    and cases.status = '입원중'
+  limit 1;
+
+  if v_existing_case_id is not null then
+    -- *** 기존 사례 재사용 분기 ***
+    -- 사례를 찾았다고 곧바로 반환하지 않는다 — 인증된 caregiver가 이
+    -- 사례에 실제로 연결되어 있는지, 동의 기록이 있는지까지 확인하고
+    -- 필요하면 채운 뒤에 반환한다(OTP 인증과 등록 제출은 성공했는데 "내
+    -- 사례"에 안 보이는 상태를 방지). 환자/보험/병원 등 cases의 기존
+    -- 컬럼 값은 여기서 절대 UPDATE하지 않는다.
+    v_link_created := false;
+    v_consent_created := false;
+
+    select case_caregiver_id
+      into v_existing_link_id
+    from case_caregivers
+    where case_id = v_existing_case_id
+      and caregiver_id = v_caregiver_id
+    limit 1;
+
+    if v_existing_link_id is null then
+      -- 동일 caregiver+case 조합으로 중복 연결을 만들지 않는다(위에서
+      -- 이미 확인함). 현재 간병인이 아무도 없을 때만 신규 연결을 현재
+      -- 간병인으로 지정하고, 이미 현재 간병인이 있으면 false로 추가한다
+      -- (기존 현재 간병인을 자동 교체하지 않음).
+      select exists (
+        select 1 from case_caregivers
+        where case_id = v_existing_case_id
+          and is_current_caregiver = true
+          and status = '활성'
+      ) into v_has_current_caregiver;
+
+      insert into case_caregivers (
+        case_id, caregiver_id, relationship,
+        is_primary_caregiver, is_current_caregiver, status
+      )
+      values (
+        v_existing_case_id, v_caregiver_id, p_relationship,
+        false, not v_has_current_caregiver, '활성'
+      );
+
+      v_link_created := true;
+    end if;
+
+    select exists (
+      select 1 from case_consents
+      where case_id = v_existing_case_id
+        and caregiver_id = v_caregiver_id
+    ) into v_consent_exists;
+
+    if not v_consent_exists then
+      -- 이 시점에는 함수 상단에서 이미 동의 6개 항목이 모두 true임을
+      -- 검증했으므로(그렇지 않으면 consent_incomplete로 예외가 발생해
+      -- 여기까지 오지 않는다) 별도 조건 없이 그대로 기록한다.
+      insert into case_consents (
+        case_id, caregiver_id, consent_version,
+        integrated_care_ward_confirmed, direct_care_confirmed,
+        false_application_confirmed, insurance_not_guaranteed_confirmed,
+        information_accuracy_confirmed, privacy_consent_confirmed,
+        consented_at
+      ) values (
+        v_existing_case_id, v_caregiver_id, p_consent_version,
+        p_consent_integrated_care_ward, p_consent_direct_care,
+        p_consent_false_application, p_consent_insurance_not_guaranteed,
+        p_consent_information_accuracy, p_consent_privacy,
+        now()
+      );
+
+      v_consent_created := true;
+    end if;
+
+    -- case_history에는 민감정보(환자명/진단명/주민등록번호 등)를 넣지
+    -- 않는다 — case_id로 이미 사례가 식별되므로 상태 변화만 기록한다.
+    if v_link_created and v_consent_created then
+      v_history_description := '기존 사례에 간병인으로 새로 연결되고 동의 기록이 생성되었습니다.';
+    elsif v_link_created then
+      v_history_description := '기존 사례에 간병인으로 새로 연결되었습니다.';
+    elsif v_consent_created then
+      v_history_description := '기존에 연결된 간병인의 동의 기록이 추가되었습니다.';
+    else
+      v_history_description := '이미 연결된 간병인이 QR 등록을 다시 시도했습니다(변경 사항 없음).';
+    end if;
+
+    insert into case_history (
+      case_id, history_type, title, action, description, actor
+    ) values (
+      v_existing_case_id, 'REGISTER_REUSE', '기존 사례 참여', '등록 재사용',
+      v_history_description, p_caregiver_name
+    );
+
+    return query select v_existing_case_id, v_existing_case_no, v_existing_family_code, true, v_caregiver_id;
+    return;
   end if;
 
   v_case_no := 'C' || to_char(now(), 'YYMMDD') || '-' || upper(substr(md5(random()::text), 1, 4));

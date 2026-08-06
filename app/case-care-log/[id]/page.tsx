@@ -34,6 +34,9 @@ export default async function CaseCareLogPage({
 
   const { supabase, caregiver } = auth;
 
+  // caregivers(*)로 전체 컬럼을 가져오지 않는다 — 이 화면은
+  // currentCaregiver.caregivers.caregiver_name만 쓴다. 주민등록번호
+  // 원문/마스킹/암호화 컬럼을 매 요청마다 불필요하게 가져올 이유가 없다.
   const { data: caseData, error } = await supabase
     .from("cases")
     .select(
@@ -42,7 +45,7 @@ export default async function CaseCareLogPage({
       hospitals (*),
       case_caregivers (
         *,
-        caregivers (*)
+        caregivers (caregiver_id, caregiver_name)
       )
     `
     )

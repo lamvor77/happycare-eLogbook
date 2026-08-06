@@ -279,6 +279,23 @@ export async function POST(request: Request) {
     }
   }
 
+  // register_case_v3는 caregiver/case/case_caregiver/case_consent를
+  // 하나의 트랜잭션으로 원자적으로 생성하므로(RPC가 성공을 반환했다면
+  // 넷 다 존재해야 정상이다), 실제로 그런지 건수만 확인해 응답에 boolean
+  // 플래그로 담는다 — 개인정보 원문은 전혀 조회/반환하지 않는다. 이 확인
+  // 자체가 실패해도 등록 자체는 이미 완료된 것이므로 등록을 실패 처리하지
+  // 않고, 플래그만 false로 내려 관리자 화면(작업 A/C)에서 드러나게 한다.
+  const { count: linkedCaregiverCount } = await admin
+    .from("case_caregivers")
+    .select("*", { count: "exact", head: true })
+    .eq("case_id", result.out_case_id)
+    .eq("status", "활성");
+
+  const { count: consentRecordCount } = await admin
+    .from("case_consents")
+    .select("*", { count: "exact", head: true })
+    .eq("case_id", result.out_case_id);
+
   // 응답에는 주민등록번호 관련 값(원문/마스킹/암호문 모두)을 절대 포함하지
   // 않는다.
   return NextResponse.json({
@@ -287,5 +304,7 @@ export async function POST(request: Request) {
     case_no: result.out_case_no,
     family_code: result.out_family_code,
     is_existing: result.out_is_existing,
+    caregiver_linked: (linkedCaregiverCount || 0) > 0,
+    consent_recorded: (consentRecordCount || 0) > 0,
   });
 }

@@ -89,6 +89,22 @@ export default async function AdminCasePrintPage({
     );
   }
 
+  // 관리자 화면 전용 상태 표시(건수/존재 여부만, 개인정보 원문 없음) —
+  // 인쇄되는 문서 내용에는 포함되지 않는다(아래 렌더링에서 print:hidden).
+  const { count: activeCaregiverCount } = await supabase
+    .from("case_caregivers")
+    .select("*", { count: "exact", head: true })
+    .eq("case_id", id)
+    .eq("status", "활성");
+
+  const { count: consentCount } = await supabase
+    .from("case_consents")
+    .select("*", { count: "exact", head: true })
+    .eq("case_id", id);
+
+  const needsCaregiverLink =
+    caseData.source_type === "google_form" && (activeCaregiverCount || 0) === 0;
+
   const today = new Date().toISOString().slice(0, 10);
 
   const documentNo = `HG-${
@@ -97,6 +113,27 @@ export default async function AdminCasePrintPage({
 
   return (
     <main className="p-6 md:p-8 max-w-6xl mx-auto bg-white">
+      {/* 관리자 화면 전용 상태 표시 — 인쇄 시 숨김(print:hidden), 문서
+          내용에는 포함되지 않는다. */}
+      <div className="print:hidden mb-4 rounded border p-3 text-sm text-gray-800 bg-gray-50">
+        <p>
+          유입경로: {caseData.source_type === "google_form" ? "구글폼" : "병원QR"}
+          {" · "}
+          간병인 연결: {activeCaregiverCount || 0}명
+          {" · "}
+          등록 동의 기록: {(consentCount || 0) > 0 ? "있음" : "없음"}
+        </p>
+
+        {needsCaregiverLink && (
+          <p className="mt-2 font-bold text-orange-800">
+            간병인 연결 필요 — 구글폼으로 등록된 사례이며 아직 어떤
+            간병인과도 연결되어 있지 않습니다. 가족코드(
+            {caseData.family_code || "-"})로 /case-join 참여를 안내하거나
+            관리자가 대신 연결해야 합니다.
+          </p>
+        )}
+      </div>
+
       <header className="mb-6 text-center">
         <h1 className="text-3xl font-bold">
           가족간병 통합 간병일지
