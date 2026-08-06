@@ -10,6 +10,36 @@
 - Header: `x-happycare-sync-secret: <GOOGLE_FORM_SYNC_SECRET 값>`
 - Body: JSON (`registration_no` 필수, 그 외 `patient_name`, `patient_birth_date` 등)
 
+### 전달 필드 (`GoogleFormSyncBody`, `app/api/google-form-sync/route.ts` 기준)
+
+| 필드 | 필수 | 형식 | 비고 |
+| --- | --- | --- | --- |
+| `registration_no` | **필수** | 문자열 | `cases.registration_no` upsert 키 |
+| `family_code`, `case_no` | 선택 | 문자열 | 없으면 서버가 자동 생성 |
+| `patient_name` | 선택(사실상 필요) | 문자열 | |
+| `patient_birth_date` | 선택 | **완전한 날짜 문자열(예: `"1950-01-01"`, 기존 방식) 또는 6자리 숫자(`"500101"`, QR 등록과 통일된 신규 방식)** | 6자리로 보낼 경우 아래 `patient_birth_century`를 반드시 함께 보내야 한다 |
+| `patient_birth_century` | `patient_birth_date`가 6자리일 때만 필수 | `"1900"` 또는 `"2000"` | 6자리만으로는 세기를 알 수 없어 서버가 임의로 추정하지 않는다 |
+| `patient_phone`, `patient_gender`, `diagnosis_name`, `room_no` | 선택 | 문자열 | |
+| `insurance_company`, `accident_type`, `accident_type_etc` | 선택 | 문자열(자유 입력) | 실제 구글폼의 선택 옵션 목록은 이 저장소에서 확인할 수 없어 강제 목록으로 검증하지 않는다 |
+| `planner_name`, `planner_phone` | 선택 | 문자열 | |
+| `care_start_date`, `care_end_date` | 선택 | 날짜 문자열 | |
+| `memo`, `status` | 선택 | 문자열 | `status` 생략 시 `"입원중"` |
+
+**간병인 관련 필드는 없다.** 이 엔드포인트는 `caregivers`/`case_caregivers`/
+`case_consents`를 전혀 생성하지 않는다 — `cases` 행만 upsert한다. 즉
+**구글폼은 간병인 주민등록번호(전체 13자리든 무엇이든)를 이 엔드포인트로
+전달하지 않으며, 서버도 그런 필드를 받지 않는다.** 구글폼으로 등록된
+사례에 간병인을 연결하려면 그 사례의 `family_code`로 `/case-join`(가족
+코드 필요)을 별도로 진행해야 한다. 자세한 비교는
+`docs/registration-field-mapping.md` 참고.
+
+향후 Apps Script가 간병인 정보까지 함께 보내도록 확장하려면, 이 엔드포인트에
+단순히 `caregivers.insert`를 추가하지 말 것 — QR 등록(`register_case_v3`)과
+동일하게 caregiver/case_caregiver/case_consents 생성이 원자적으로 묶여야
+하고, 주민등록번호는 `lib/caregiver-resident-number.ts`로 암호화해서만
+저장해야 한다(`docs/privacy-data-policy.md` 3절). 이 문서는 그 변경이
+실제로 이뤄지기 전까지는 위 필드 목록이 유효함을 명시한다.
+
 ## Apps Script에서 시크릿을 안전하게 저장하는 방법
 
 시크릿 값을 스크립트 코드에 직접 적지 말고, Apps Script의

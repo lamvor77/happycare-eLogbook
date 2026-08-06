@@ -37,9 +37,16 @@ export async function getCaregiverSession() {
   const tokenHash = hashSessionToken(rawToken);
   const supabase = createSupabaseAdminClient();
 
+  // caregivers(*)로 전체 컬럼을 가져오지 않는다 — 이 앱 전체에서 실제로
+  // 쓰이는 필드는 caregiver_id/caregiver_name/phone_normalized뿐이다(모든
+  // 호출부 확인됨). 주민등록번호 원문/마스킹/암호화 컬럼(resident_number*)
+  // 은 매 요청마다 불필요하게 메모리로 가져올 이유가 없으므로 명시적으로
+  // 제외한다.
   const { data: session } = await supabase
     .from("caregiver_sessions")
-    .select("session_id, caregiver_id, expires_at, revoked_at, caregivers (*)")
+    .select(
+      "session_id, caregiver_id, expires_at, revoked_at, caregivers (caregiver_id, caregiver_name, phone_normalized)"
+    )
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
