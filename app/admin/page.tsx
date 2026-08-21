@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import LogoutButton from "./LogoutButton";
+import RecentCaseTestResetButton from "./RecentCaseTestResetButton";
 import type { CaseRecord, CareLog } from "@/types/domain";
 
 function getSourceLabel(sourceType?: string | null) {
@@ -130,6 +131,13 @@ export default async function AdminPage() {
           >
             위치 미기록 보기
           </a>
+
+          <a
+            href="/admin/test-reset"
+            className="bg-gray-700 text-white px-4 py-2 rounded"
+          >
+            테스트 데이터 초기화
+          </a>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -252,6 +260,8 @@ export default async function AdminPage() {
                     >
                       PDF 출력
                     </a>
+
+                    <RecentCaseTestResetButton caseId={item.case_id} />
                   </div>
                 ))
               ) : (

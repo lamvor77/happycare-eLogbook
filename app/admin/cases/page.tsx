@@ -200,6 +200,13 @@ export default async function AdminCasesPage({
               >
                 간병일지 관리
               </a>
+
+              <a
+                href={`/admin/test-reset?caseId=${item.case_id}`}
+                className="bg-red-100 text-red-800 px-3 py-2 rounded text-sm font-bold"
+              >
+                테스트 초기화
+              </a>
             </div>
           </div>
           );
