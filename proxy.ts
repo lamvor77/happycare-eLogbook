@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/access-denied"];
+const PUBLIC_ADMIN_PATHS = [
+  "/admin/login",
+  "/admin/access-denied",
+  "/admin/forgot-password",
+  "/admin/reset-password",
+];
 
 // Next.js 16부터 middleware.ts는 proxy.ts로 대체되었다.
 // 여기서는 로그인 여부만 낙관적으로 확인한다(관리자 이메일 검증은
