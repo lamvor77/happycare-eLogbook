@@ -58,7 +58,7 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 
 | 구분 | Google Form 항목 | QR 등록 항목 | DB 컬럼 | 필수 | 현재 상태 | 변환 규칙 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 보험사 | `insurance_company` | `insurance_company` | `cases.insurance_company` | 아니오 | **2026-08-23부터 QR 화면은 기존 Google Form의 실제 선택지를 동적으로 받아오는 `<select>`(+"기타" 자유입력)** | `GET /api/registration-options` → `lib/legacy-registration-options.ts`가 기존 Apps Script config 엔드포인트를 조회(작업 15~19). Google Form 경로는 여전히 자유 입력 |
+| 보험사 | `insurance_company` | `insurance_company` | `cases.insurance_company` | **QR: 필수(클라이언트 검증만, 2026-08-24부터)** / Google Form: 아니오 | **2026-08-23부터 QR 화면은 기존 Google Form의 실제 선택지를 동적으로 받아오는 `<select>`(+"기타" 자유입력)**, config 조회 실패 시 직접입력 fallback으로 전환되며 그 값도 동일하게 필수 검증 대상(작업: 등록 버튼 QA 수정) — 서버(`register_case_v3`)는 여전히 `p_insurance_company`를 nullable로 받아 강제하지 않는다(클라이언트만 막음) | `GET /api/registration-options` → `lib/legacy-registration-options.ts`가 기존 Apps Script config 엔드포인트를 조회(작업 15~19). Google Form 경로는 여전히 자유 입력 |
 | 보험사 "기타" 상세 | **없음** | `insurance_company_other` | `cases.insurance_company_other`(2026-08-23 추가) | 아니오 | **신규** — 보험사로 "기타"를 선택했을 때만 값이 채워짐. `register_case_v3`의 `p_insurance_company_other` 파라미터로 전달되어 admission_status와 동일하게 신규 사례 생성 트랜잭션 안에서 저장(별도 UPDATE 없음, RPC 내부에서 `insurance_company≠"기타"`면 예외로 거부) | 기존 시스템으로 "기타인 경우 입력해주세요" 컬럼에 전송 |
 | 담당설계사 | `planner_name` | `planner_name` | `cases.planner_name` | 아니오 | 동일 | 그대로 저장 |
 | 설계사 연락처 | `planner_phone` | `planner_phone` | `cases.planner_phone` | 아니오 | 동일 | 그대로 저장 |

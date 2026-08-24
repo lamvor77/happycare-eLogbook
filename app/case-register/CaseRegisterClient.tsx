@@ -248,6 +248,11 @@ export default function CaseRegisterClient() {
       return;
     }
 
+    if (!hasValidInsuranceCompany) {
+      setMessage("보험사를 선택하거나 직접 입력해주세요.");
+      return;
+    }
+
     if (!isConsentComplete(consents)) {
       setMessage("동의 항목을 모두 확인해주세요.");
       return;
@@ -282,9 +287,11 @@ export default function CaseRegisterClient() {
         accident_type: accidentType,
         accident_type_etc: accidentTypeEtc,
 
-        insurance_company: insuranceCompany,
+        insurance_company: insuranceCompany.trim(),
         insurance_company_other:
-          insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE ? insuranceCompanyOther : undefined,
+          insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE
+            ? insuranceCompanyOther.trim()
+            : undefined,
         planner_name: plannerName,
         planner_phone: plannerPhone,
 
@@ -318,15 +325,41 @@ export default function CaseRegisterClient() {
     }, 1200);
   }
 
-  const canSubmit =
+  // "등록하기" 버튼 활성화 조건 — 판정 기준을 이름 붙은 변수로 나눠
+  // handleSubmit의 개별 검증(위)과 정확히 같은 기준을 쓰도록 한다(QA
+  // 진단용으로도 각 조건을 분리해 어떤 조건이 막고 있는지 추적하기 쉽게
+  // 한다 — 화면에 노출하거나 개인정보를 로그로 남기지는 않는다).
+  const requiredFieldsValid =
     Boolean(patientName) &&
     Boolean(relationship) &&
-    Boolean(normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd)) &&
-    isConsentComplete(consents) &&
-    (hasSession ||
-      (Boolean(caregiverName.trim()) &&
-        isValidResidentNumberFormat(residentNumberInput) &&
-        otpStep === "verified"));
+    Boolean(normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd));
+
+  const otpVerified = hasSession || otpStep === "verified";
+
+  const caregiverFieldsValid =
+    hasSession ||
+    (Boolean(caregiverName.trim()) && isValidResidentNumberFormat(residentNumberInput));
+
+  const allConsentsChecked = isConsentComplete(consents);
+
+  // 보험사는 정상 select 모드에서는 select 값(또는 "기타" 상세), config
+  // 조회가 실패해 직접입력 fallback으로 전환된 상태에서는 그 입력값을
+  // 그대로 쓴다 — 두 모드 모두 insuranceCompany state 하나를 공유하므로
+  // fallback 모드에서 직접 입력해도 이 조건이 정상적으로 충족된다(어떤
+  // 목록이 로드됐는지와 무관하게 "실제 입력된 값이 있는가"만 본다).
+  const effectiveInsuranceCompany =
+    insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE
+      ? insuranceCompanyOther.trim()
+      : insuranceCompany.trim();
+
+  const hasValidInsuranceCompany = effectiveInsuranceCompany.length > 0;
+
+  const canSubmit =
+    requiredFieldsValid &&
+    otpVerified &&
+    caregiverFieldsValid &&
+    allConsentsChecked &&
+    hasValidInsuranceCompany;
 
   if (checkingSession) {
     return <main className="p-8 text-gray-900">확인 중입니다...</main>;
