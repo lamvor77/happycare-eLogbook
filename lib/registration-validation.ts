@@ -97,6 +97,44 @@ export function normalizePatientBirthDateParts(
   return iso;
 }
 
+/**
+ * 환자 생년월일 "8자리(YYYYMMDD)"를 ISO date("YYYY-MM-DD")로 변환한다.
+ * 4자리 연도를 그대로 받으므로 정규화 함수(normalizePatientBirthDateParts)와
+ * 달리 세기 선택 입력이 필요 없다. 실제 존재하지 않는 날짜(예: 02월 30일)나
+ * 8자리가 아닌 입력은 null을 반환한다 — 서버가 반드시 이 함수로 재검증한다.
+ */
+export function normalizePatientBirthDateYyyymmdd(input: string): string | null {
+  const digits = input.replace(/[^0-9]/g, "");
+
+  if (digits.length !== 8) {
+    return null;
+  }
+
+  const year = digits.slice(0, 4);
+  const mm = digits.slice(4, 6);
+  const dd = digits.slice(6, 8);
+  const month = Number(mm);
+  const day = Number(dd);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  const iso = `${year}-${mm}-${dd}`;
+  const parsed = new Date(`${iso}T00:00:00Z`);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== Number(year) ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return iso;
+}
+
 /** 이미 "YYYY-MM-DD" 형식인 값(예: 기존 Google Form 연동)의 유효성만 확인한다. */
 export function isValidIsoDate(input: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) {

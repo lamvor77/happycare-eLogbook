@@ -11,12 +11,16 @@ import {
   maskResidentNumber,
 } from "@/lib/caregiver-resident-number";
 import {
-  normalizePatientBirthDateParts,
+  normalizePatientBirthDateYyyymmdd,
   isConsentComplete,
-  type BirthCentury,
 } from "@/lib/registration-validation";
-import type { ConsentKey } from "@/lib/registration-options";
+import {
+  ACCIDENT_TYPE_OPTIONS,
+  ADMISSION_STATUS_OPTIONS,
+  type ConsentKey,
+} from "@/lib/registration-options";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
+import { syncCaseToLegacySystem } from "@/lib/legacy-sync";
 
 interface RegisterRequestBody {
   hospital_token?: string;
@@ -29,14 +33,14 @@ interface RegisterRequestBody {
   resident_number?: string;
   admission_status?: string;
   patient_name?: string;
-  patient_birth_yymmdd?: string;
-  patient_birth_century?: BirthCentury;
+  patient_birth_yyyymmdd?: string;
   patient_phone?: string;
   patient_gender?: string;
   relationship?: string;
   diagnosis_name?: string;
   room_no?: string;
   insurance_company?: string;
+  insurance_company_other?: string;
   accident_type?: string;
   accident_type_etc?: string;
   planner_name?: string;
@@ -68,6 +72,14 @@ function mapRpcError(message: string): { status: number; error: string } {
 
   if (message.includes("invalid_resident_number")) {
     return { status: 400, error: "간병인 주민등록번호를 확인해주세요." };
+  }
+
+  if (message.includes("invalid_admission_status")) {
+    return { status: 400, error: "현재상태를 확인해주세요." };
+  }
+
+  if (message.includes("invalid_insurance_company_other")) {
+    return { status: 400, error: "보험사 정보를 확인해주세요." };
   }
 
   return { status: 500, error: "등록 처리에 실패했습니다." };
@@ -104,31 +116,49 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "동의 정보를 확인해주세요." }, { status: 400 });
   }
 
-  // admission_status(입원 예정/당일/중)는 DB 컬럼이 없어 이번 단계에서는
-  // 저장하지 않는다(docs/registration-field-mapping.md 참고). 값을 받되
-  // RPC에는 전달하지 않는다 — 향후 컬럼이 추가되면 여기서 매핑한다.
+  // admission_status(현재상태)는 이제 register_case_v3의
+  // p_admission_status 파라미터로 전달되어 사례 생성과 같은 트랜잭션 안에서
+  // cases.admission_status에 저장된다(20260823090000_
+  // legacy_sync_field_map.sql). 여기서는 값의 형식만 먼저 확인한다.
+  if (
+    body.admission_status &&
+    !ADMISSION_STATUS_OPTIONS.some((option) => option.value === body.admission_status)
+  ) {
+    return NextResponse.json({ error: "현재상태를 확인해주세요." }, { status: 400 });
+  }
 
-  let patientBirthDate: string | null = null;
+  // 사고유형은 기존 Google Form의 실제 값(질병/상해/교통사고) 외에는
+  // 거부한다(작업 11).
+  if (
+    body.accident_type &&
+    !ACCIDENT_TYPE_OPTIONS.some((option) => option.value === body.accident_type)
+  ) {
+    return NextResponse.json({ error: "사고유형을 확인해주세요." }, { status: 400 });
+  }
 
-  if (body.patient_birth_yymmdd) {
-    if (!body.patient_birth_century) {
-      return NextResponse.json(
-        { error: "환자 생년월일의 출생연도대를 선택해주세요." },
-        { status: 400 }
-      );
-    }
+  // 보험사: 정상적으로는 GET /api/registration-options가 내려준 목록 중
+  // 하나 또는 "기타"이지만, 그 조회 자체가 실패했을 때는 화면이 직접입력
+  // fallback으로 전환된다(작업 3) — 그 경우 임의 문자열이 올 수 있으므로
+  // 서버는 목록 검증 대신 형식만 검증한다(과도한 길이 방지).
+  const INSURANCE_COMPANY_MAX_LENGTH = 100;
 
-    patientBirthDate = normalizePatientBirthDateParts(
-      body.patient_birth_yymmdd,
-      body.patient_birth_century
+  if (body.insurance_company && body.insurance_company.trim().length > INSURANCE_COMPANY_MAX_LENGTH) {
+    return NextResponse.json({ error: "보험사명을 다시 확인해주세요." }, { status: 400 });
+  }
+
+  // insurance_company_other는 보험사가 정확히 "기타"일 때만 의미가 있다 —
+  // 그 외 조합이면 서버가 무시하고 저장하지 않는다(RPC 쪽에서도 같은
+  // 불변조건을 한 번 더 강제한다).
+  const insuranceCompanyOther =
+    body.insurance_company === "기타" ? body.insurance_company_other || null : null;
+
+  const patientBirthDate = normalizePatientBirthDateYyyymmdd(body.patient_birth_yyyymmdd || "");
+
+  if (!patientBirthDate) {
+    return NextResponse.json(
+      { error: "환자 생년월일 8자리(YYYYMMDD)를 정확히 입력해주세요." },
+      { status: 400 }
     );
-
-    if (!patientBirthDate) {
-      return NextResponse.json(
-        { error: "환자 생년월일 6자리를 정확히 입력해주세요." },
-        { status: 400 }
-      );
-    }
   }
 
   // 이미 유효한 세션이 있으면(재방문 등록) 그 caregiver 신원을 그대로
@@ -243,6 +273,8 @@ export async function POST(request: Request) {
     p_consent_insurance_not_guaranteed: consentPayload.insurance_not_guaranteed_confirmed,
     p_consent_information_accuracy: consentPayload.information_accuracy_confirmed,
     p_consent_privacy: consentPayload.privacy_consent_confirmed,
+    p_admission_status: body.admission_status || null,
+    p_insurance_company_other: insuranceCompanyOther,
   });
 
   if (error) {
@@ -276,6 +308,22 @@ export async function POST(request: Request) {
 
     if (historyError) {
       console.error("case_history insert 실패:", historyError);
+    }
+
+    // 신규 사례일 때만 기존 가족간병관리 시스템으로 등록정보를 자동
+    // 전송한다(작업 D — "전자일지 최초등록 성공 시"). 기존 사례 재사용
+    // 분기는 이미 최초 등록 시점에 전송이 끝났으므로 다시 보내지 않는다.
+    // 전송 실패(웹훅 미설정 포함)는 등록 자체를 절대 실패시키지 않는다 —
+    // syncCaseToLegacySystem 내부에서 실패해도 cases.legacy_sync_status만
+    // 'failed'로 남기고 정상 반환하지만, 예상치 못한 예외까지 등록 응답을
+    // 막지 않도록 이 호출 자체도 try/catch로 감싼다.
+    try {
+      await syncCaseToLegacySystem(result.out_case_id);
+    } catch (syncError) {
+      console.error(
+        "legacy sync 처리 중 예외:",
+        syncError instanceof Error ? syncError.message : "알 수 없는 오류"
+      );
     }
   }
 

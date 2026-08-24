@@ -15,7 +15,7 @@
 | 대상 | 항목 | 비고 |
 | --- | --- | --- |
 | 간병인(caregivers) | 성명, 휴대폰번호, **주민등록번호 전체 13자리(암호화 저장, 3절)** | 로그인은 Solapi SMS OTP + 자체 장기 세션(HttpOnly 쿠키)으로 처리, 별도 비밀번호 없음(`docs/solapi-caregiver-auth.md`) |
-| 환자(cases) | 성명, **생년월일(6자리 YYMMDD + 세기 선택, 서버에서 날짜로 변환, 4절)**, 연락처, 성별, 진단명, 입원호실, 보험사, 사고유형, 담당설계사 정보 | 사례(case) 단위로 저장. 환자는 주민등록번호를 수집하지 않는다 |
+| 환자(cases) | 성명, **생년월일(8자리 YYYYMMDD 필수, 서버에서 날짜로 검증·변환, 4절)**, 연락처, 성별, 진단명, 입원호실, 보험사(+"기타" 상세), 사고유형, 현재상태, 담당설계사 정보 | 사례(case) 단위로 저장. 환자는 주민등록번호를 수집하지 않는다 |
 | 동의 기록(case_consents) | 등록 동의 6개 항목(boolean) + 동의 문구 버전 + 동의 시각 | IP/User-Agent는 저장하지 않는다(최소 수집 원칙, 운영 확인 필요 — 8절) |
 | 위치정보(care_logs) | 간병일지 작성 시점의 위도/경도 또는 미기록 사유 | 작성 시점 1회성 기록, 실시간 위치추적 아님 |
 | 사진(care_log_photos) | 간병 증빙 사진 파일(스키마만 존재, 현재 업로드 코드 경로 없음) | Supabase Storage `care-log-photos` 버킷(`docs/data-model.md` 3.6절) |
@@ -76,20 +76,31 @@ caregiver-resident-number.ts`):
 `.env.example` 참고). `CAREGIVER_SESSION_SECRET`과 별도의 키를 쓴다. 키
 자체는 어떤 문서/커밋/로그에도 값으로 남기지 않는다.
 
-**복호화**: `lib/caregiver-resident-number.ts`에 `decryptResidentNumber()`가
-존재하지만, **이번 단계에서는 어떤 API 라우트도 이 함수를 호출하지
-않는다.** 원문 조회가 실제로 필요해지면 5절의 조건을 갖춘 별도 기능으로
-분리한다.
+**복호화**: `lib/caregiver-resident-number.ts`의 `decryptResidentNumber()`는
+**2026-08-23부터 `lib/legacy-sync.ts`가 유일하게 호출한다** — 기존
+가족간병관리 시스템이 업무상 필요로 하는 간병인 주민등록번호를 그
+시스템으로 전송하기 직전에만, HTTPS + 공유 시크릿 헤더로 보호되는 서버
+간 요청 안에서 복호화한다(`docs/legacy-sync-integration.md`). 전자일지
+자체의 어떤 관리자 화면/조회 API도 이 함수를 호출하지 않는다(5절 — 일반
+표시/조회 목적의 원문 조회 기능은 여전히 별도 후속 기능으로 분리해야
+한다).
 
 ## 4. 환자 생년월일 처리
 
-환자는 주민등록번호를 수집하지 않는다. 생년월일은 "6자리(YYMMDD)"만
-입력받고, 화면 문구도 "주민등록번호"가 아니라 "생년월일 6자리"로 표시한다.
-6자리만으로는 세기(1900년대/2000년대)를 알 수 없으므로, 화면에서 별도로
-세기를 선택받아 서버(`lib/registration-validation.ts`의
-`normalizePatientBirthDateParts`)가 `cases.patient_birth_date`(date 타입)로
-변환한다 — 세기를 임의로 추정하는 로직은 없다(추정이 틀리면 잘못된 생년이
-영구히 저장되는 위험이 있어 의도적으로 배제).
+환자는 주민등록번호를 수집하지 않는다. QR 최초 등록 화면
+(`app/case-register`)은 2026-08-23부터 생년월일을 "8자리(YYYYMMDD)"
+필수 입력으로 받는다(이전에는 "6자리 + 세기 선택"의 선택 입력이었다).
+화면 문구도 "주민등록번호"가 아니라 "생년월일 8자리"로 표시한다. 4자리
+연도를 그대로 받으므로 세기 선택 UI가 필요 없어졌고, 클라이언트/서버
+모두 `lib/registration-validation.ts`의
+`normalizePatientBirthDateYyyymmdd()`로 실제 존재하는 날짜인지 검증한
+뒤 `cases.patient_birth_date`(date 타입)로 변환해 저장한다.
+
+Google Form 연동(`app/api/google-form-sync`)은 이 변경과 무관하게
+기존 방식(완전한 날짜 문자열 또는 "6자리 + 세기", `lib/
+registration-validation.ts`의 `normalizePatientBirthDateParts()`)을
+그대로 유지한다 — 외부 시스템이 보내는 형식을 이 저장소가 바꿀 수
+없기 때문이다.
 
 ## 5. 마스킹 표시 정책(관리자 화면)
 
@@ -208,3 +219,8 @@ caregiver-resident-number.ts`):
   state에만 보관, 제출/오류 후 적절한 시점에 초기화).
 - Vercel 등 배포 환경의 로그 보존 기간/접근 권한도 이 규칙과 함께
   검토할 것(코드 범위 밖).
+- `lib/legacy-sync.ts`(기존 가족간병관리 시스템 전송)도 동일한 규칙을
+  따른다: 복호화된 간병인 주민등록번호와 요청/응답 body를 console에
+  출력하지 않고, 실패 시에도 `LegacySyncErrorCode`(안전한 코드 문자열)만
+  로그와 `cases.legacy_sync_error`에 남긴다(`docs/
+  legacy-sync-integration.md` "개인정보 처리" 절).

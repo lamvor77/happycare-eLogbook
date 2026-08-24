@@ -7,6 +7,8 @@ import {
   RELATIONSHIP_OPTIONS,
   PATIENT_GENDER_OPTIONS,
   ADMISSION_STATUS_OPTIONS,
+  ACCIDENT_TYPE_OPTIONS,
+  INSURANCE_COMPANY_OTHER_VALUE,
   CONSENT_ITEMS,
   CONSENT_VERSION,
   type ConsentKey,
@@ -14,6 +16,7 @@ import {
 import {
   autoFormatResidentNumberInput,
   isValidResidentNumberFormat,
+  normalizePatientBirthDateYyyymmdd,
   isConsentComplete,
 } from "@/lib/registration-validation";
 
@@ -52,8 +55,7 @@ export default function CaseRegisterClient() {
 
   // 4. 환자 정보
   const [patientName, setPatientName] = useState("");
-  const [patientBirthYymmdd, setPatientBirthYymmdd] = useState("");
-  const [patientBirthCentury, setPatientBirthCentury] = useState<"1900" | "2000">("1900");
+  const [patientBirthYyyymmdd, setPatientBirthYyyymmdd] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientGender, setPatientGender] = useState("");
   const [diagnosisName, setDiagnosisName] = useState("");
@@ -62,8 +64,19 @@ export default function CaseRegisterClient() {
 
   // 5. 보험/설계사 정보
   const [insuranceCompany, setInsuranceCompany] = useState("");
+  const [insuranceCompanyOther, setInsuranceCompanyOther] = useState("");
   const [plannerName, setPlannerName] = useState("");
   const [plannerPhone, setPlannerPhone] = useState("");
+
+  // 보험사/사고유형 선택지 — 기존 가족간병관리 Google Form을 원본으로
+  // 서버가 대신 조회한다(GET /api/registration-options). 사고유형은
+  // 실패해도 ACCIDENT_TYPE_OPTIONS 고정값으로 대체되므로 항상 값이 있다.
+  const [insuranceCompanyOptions, setInsuranceCompanyOptions] = useState<string[]>([]);
+  const [accidentTypeOptions, setAccidentTypeOptions] = useState<string[]>(
+    ACCIDENT_TYPE_OPTIONS.map((option) => option.value)
+  );
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState(false);
 
   // 6. 확인 및 동의
   const [consents, setConsents] = useState<Record<ConsentKey, boolean>>(
@@ -109,8 +122,37 @@ export default function CaseRegisterClient() {
       setCheckingSession(false);
     }
 
+    async function loadRegistrationOptions() {
+      setLoadingOptions(true);
+
+      const response = await fetch("/api/registration-options");
+      const body = await response.json().catch(() => null);
+
+      setLoadingOptions(false);
+
+      if (!response.ok || !body) {
+        setOptionsError(true);
+        return;
+      }
+
+      const fetchedInsuranceCompanies = Array.isArray(body.insuranceCompanies)
+        ? body.insuranceCompanies
+        : [];
+
+      setInsuranceCompanyOptions(fetchedInsuranceCompanies);
+
+      if (Array.isArray(body.accidentTypes) && body.accidentTypes.length > 0) {
+        setAccidentTypeOptions(body.accidentTypes);
+      }
+
+      // ok:false여도(예: 마지막 성공 캐시를 재사용) 목록 자체는 쓸 수
+      // 있으므로 목록이 비어 있을 때만 오류 문구를 보여준다(작업 18).
+      setOptionsError(!body.ok && fetchedInsuranceCompanies.length === 0);
+    }
+
     loadHospital();
     checkSession();
+    loadRegistrationOptions();
   }, [hospitalCode, hospitalToken]);
 
   function resetResidentNumber() {
@@ -201,8 +243,8 @@ export default function CaseRegisterClient() {
       }
     }
 
-    if (patientBirthYymmdd && patientBirthYymmdd.length !== 6) {
-      setMessage("환자 생년월일 6자리를 정확히 입력해주세요.");
+    if (!normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd)) {
+      setMessage("환자 생년월일 8자리(YYYYMMDD)를 정확히 입력해주세요.");
       return;
     }
 
@@ -232,8 +274,7 @@ export default function CaseRegisterClient() {
         memo,
 
         patient_name: patientName,
-        patient_birth_yymmdd: patientBirthYymmdd || undefined,
-        patient_birth_century: patientBirthYymmdd ? patientBirthCentury : undefined,
+        patient_birth_yyyymmdd: patientBirthYyyymmdd,
         patient_phone: patientPhone,
         patient_gender: patientGender,
         relationship,
@@ -242,6 +283,8 @@ export default function CaseRegisterClient() {
         accident_type_etc: accidentTypeEtc,
 
         insurance_company: insuranceCompany,
+        insurance_company_other:
+          insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE ? insuranceCompanyOther : undefined,
         planner_name: plannerName,
         planner_phone: plannerPhone,
 
@@ -278,6 +321,7 @@ export default function CaseRegisterClient() {
   const canSubmit =
     Boolean(patientName) &&
     Boolean(relationship) &&
+    Boolean(normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd)) &&
     isConsentComplete(consents) &&
     (hasSession ||
       (Boolean(caregiverName.trim()) &&
@@ -404,7 +448,7 @@ export default function CaseRegisterClient() {
           </label>
           <input
             className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
-            placeholder="예: 2026-06-01"
+            type="date"
             value={careStartDate}
             onChange={(e) => setCareStartDate(e.target.value)}
           />
@@ -414,7 +458,7 @@ export default function CaseRegisterClient() {
           </label>
           <input
             className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
-            placeholder="예: 2026-06-30"
+            type="date"
             value={careEndDate}
             onChange={(e) => setCareEndDate(e.target.value)}
           />
@@ -443,32 +487,21 @@ export default function CaseRegisterClient() {
           />
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
-            생년월일 6자리
+            생년월일 8자리
           </label>
-          <div className="flex gap-2 mb-1">
-            <input
-              className="flex-1 border p-3 rounded min-h-[44px] text-gray-900"
-              placeholder="YYMMDD"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={patientBirthYymmdd}
-              onChange={(e) =>
-                setPatientBirthYymmdd(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-              }
-            />
-
-            <select
-              className="border p-3 rounded min-h-[44px] text-gray-900"
-              value={patientBirthCentury}
-              onChange={(e) => setPatientBirthCentury(e.target.value as "1900" | "2000")}
-            >
-              <option value="1900">19XX년생</option>
-              <option value="2000">20XX년생</option>
-            </select>
-          </div>
+          <input
+            className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
+            placeholder="YYYYMMDD"
+            type="text"
+            inputMode="numeric"
+            maxLength={8}
+            value={patientBirthYyyymmdd}
+            onChange={(e) =>
+              setPatientBirthYyyymmdd(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))
+            }
+          />
           <p className="text-xs text-gray-700 mb-3">
-            주민등록번호가 아닌 생년월일 6자리만 입력합니다(선택 입력).
+            주민등록번호가 아닌 생년월일 8자리(예: 19500101)를 입력합니다.
           </p>
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
@@ -508,11 +541,18 @@ export default function CaseRegisterClient() {
           <label className="block text-sm font-bold text-gray-800 mb-1">
             사고유형
           </label>
-          <input
+          <select
             className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
             value={accidentType}
             onChange={(e) => setAccidentType(e.target.value)}
-          />
+          >
+            <option value="">사고유형 선택</option>
+            {accidentTypeOptions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
             기타 사고유형
@@ -531,11 +571,54 @@ export default function CaseRegisterClient() {
           <label className="block text-sm font-bold text-gray-800 mb-1">
             보험사
           </label>
-          <input
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
-            value={insuranceCompany}
-            onChange={(e) => setInsuranceCompany(e.target.value)}
-          />
+          {loadingOptions ? (
+            <p className="text-sm text-gray-700 mb-3">보험사 정보를 불러오는 중입니다...</p>
+          ) : optionsError && insuranceCompanyOptions.length === 0 ? (
+            <>
+              <p className="text-sm text-red-600 mb-1">
+                보험사 목록을 불러오지 못했습니다. 보험사명을 직접 입력해주세요.
+              </p>
+              <input
+                className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+                value={insuranceCompany}
+                onChange={(e) => setInsuranceCompany(e.target.value)}
+              />
+            </>
+          ) : (
+            <select
+              className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
+              value={insuranceCompany}
+              onChange={(e) => {
+                setInsuranceCompany(e.target.value);
+                if (e.target.value !== INSURANCE_COMPANY_OTHER_VALUE) {
+                  setInsuranceCompanyOther("");
+                }
+              }}
+            >
+              <option value="">보험사 선택</option>
+              {insuranceCompanyOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+              {!insuranceCompanyOptions.includes(INSURANCE_COMPANY_OTHER_VALUE) && (
+                <option value={INSURANCE_COMPANY_OTHER_VALUE}>{INSURANCE_COMPANY_OTHER_VALUE}</option>
+              )}
+            </select>
+          )}
+
+          {insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE && (
+            <>
+              <label className="block text-sm font-bold text-gray-800 mb-1">
+                기타인 경우 입력해주세요
+              </label>
+              <input
+                className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+                value={insuranceCompanyOther}
+                onChange={(e) => setInsuranceCompanyOther(e.target.value)}
+              />
+            </>
+          )}
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
             담당설계사

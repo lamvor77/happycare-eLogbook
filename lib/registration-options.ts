@@ -34,30 +34,44 @@ export const PATIENT_GENDER_OPTIONS: OptionItem[] = [
 ];
 
 /**
- * 입원 상태(입원 예정/입원 당일/입원 중). 이번 작업에서 화면에 새로 추가하는
- * 항목이다 — 기존 코드에 이 3단계를 저장하는 컬럼이 없다(cases.status는
- * "입원중"/"간병종료" 두 값만 쓰며, 이 3단계와 의미가 다르다). 그래서 이
- * 상수는 UI 표시/검증에만 쓰고, 아래 "등록 API" 문서에 명시된 대로 서버에는
- * 전송하되 cases.status에는 절대 매핑하지 않는다(docs/
- * registration-field-mapping.md 참고 — DB 컬럼이 아직 없는 항목으로 별도
- * 표시됨).
+ * 현재상태(입원 예정/입원 당일/입원 중). 기존 가족간병관리 Sheet의
+ * `현재상태` 컬럼과 값이 정확히 같아야 하므로 저장값에 밑줄을 쓰지 않고
+ * Sheet 표시값 그대로 공백으로 저장한다(2026-08-23 실제 Sheet 헤더 확인
+ * 후 수정 — 이전에는 "입원_예정" 형태였다). `cases.admission_status`
+ * 컬럼(`20260823090000_legacy_sync_field_map.sql`)에 저장되고, 여전히
+ * `cases.status`("입원중"/"간병종료")와는 별개 값이다(임의로 매핑하지
+ * 않음).
  */
 export const ADMISSION_STATUS_OPTIONS: OptionItem[] = [
-  { value: "입원_예정", label: "입원 예정" },
-  { value: "입원_당일", label: "입원 당일" },
-  { value: "입원_중", label: "입원 중" },
+  { value: "입원 예정", label: "입원 예정" },
+  { value: "입원 당일", label: "입원 당일" },
+  { value: "입원 중", label: "입원 중" },
 ];
 
 /**
- * 보험사 / 사고유형: 실제 구글폼이 이 저장소 밖에 있어(Google Apps
- * Script/Form) 정확한 선택값 목록을 코드에서 확인할 수 없었다. 임의로
- * 목록을 지어내지 않기 위해 강제 드롭다운으로 만들지 않고 자유 입력을
- * 유지한다(기존 CaseRegisterClient도 자유 입력이었다 — 동작 변경 없음).
- * 실제 구글폼 선택값을 확인할 수 있게 되면 이 배열을 채우고 화면을
- * <select>로 바꿀 것.
+ * 보험사: 2026-08-23부터 이 저장소에 하드코딩된 목록을 두지 않는다 —
+ * 기존 Google Form의 "보험사" 질문 선택지를 단일 원본(Source of Truth)으로
+ * 삼아 `GET /api/registration-options`가 매 요청마다 최신 값을 내려준다
+ * (`app/api/registration-options/route.ts`, `lib/
+ * legacy-registration-options.ts`). Form에서 선택지가 추가/삭제되면 이
+ * 코드를 고치거나 재배포하지 않아도 다음 등록 화면부터 반영된다.
  */
-export const INSURANCE_COMPANY_OPTIONS: OptionItem[] = [];
-export const ACCIDENT_TYPE_OPTIONS: OptionItem[] = [];
+
+/**
+ * 사고유형: 기존 Google Form의 실제 선택값(질병/상해/교통사고)이
+ * 2026-08-23에 확인되어 고정 상수로 둔다 — 서버도 이 3개 값 외에는
+ * 거부한다(`app/api/cases/register/route.ts`). `/api/registration-options`
+ * 응답에 값이 포함되면 그 값을 우선 쓰고, 응답이 없거나 실패하면 이
+ * 상수를 기본값으로 쓴다(`CaseRegisterClient.tsx`).
+ */
+export const ACCIDENT_TYPE_OPTIONS: OptionItem[] = [
+  { value: "질병", label: "질병" },
+  { value: "상해", label: "상해" },
+  { value: "교통사고", label: "교통사고" },
+];
+
+/** 보험사 선택지에서 "기타"를 고르면 자유 입력 필드를 추가로 보여준다. */
+export const INSURANCE_COMPANY_OTHER_VALUE = "기타";
 
 export const ACCIDENT_TYPE_ETC_VALUE = "기타";
 

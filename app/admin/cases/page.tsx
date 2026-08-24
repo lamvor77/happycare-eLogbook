@@ -1,10 +1,18 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import type { CaseRecord } from "@/types/domain";
+import LegacySyncRetryButton from "./LegacySyncRetryButton";
 
 function getSourceLabel(sourceType?: string | null) {
   if (sourceType === "google_form") return "구글폼";
   if (sourceType === "hospital_qr") return "병원QR";
   return "-";
+}
+
+function getLegacySyncLabel(status: string | null) {
+  if (status === "synced") return { text: "기존 시스템 연동: 완료", className: "bg-green-100 text-green-800" };
+  if (status === "pending") return { text: "기존 시스템 연동: 대기", className: "bg-gray-100 text-gray-800" };
+  if (status === "failed") return { text: "기존 시스템 연동: 실패", className: "bg-red-100 text-red-800" };
+  return null;
 }
 
 export default async function AdminCasesPage({
@@ -118,6 +126,7 @@ export default async function AdminCasesPage({
           const hasConsentRecord = consentExistsByCase.has(item.case_id);
           const needsCaregiverLink =
             item.source_type === "google_form" && activeCaregiverCount === 0;
+          const legacySyncLabel = getLegacySyncLabel(item.legacy_sync_status);
 
           return (
           <div key={item.case_id} className="bg-white border rounded-lg p-5 shadow-sm">
@@ -154,6 +163,20 @@ export default async function AdminCasesPage({
             <p className="text-sm text-gray-600">
               상태: {item.status}
             </p>
+
+            {legacySyncLabel && (
+              <div className="mt-1">
+                <span
+                  className={`inline-block text-xs font-bold px-2 py-1 rounded ${legacySyncLabel.className}`}
+                >
+                  {legacySyncLabel.text}
+                </span>
+
+                {item.legacy_sync_status === "failed" && (
+                  <LegacySyncRetryButton caseId={item.case_id} />
+                )}
+              </div>
+            )}
 
             <p className="text-sm text-gray-600">
               간병인 연결: {activeCaregiverCount}명

@@ -7,6 +7,23 @@
 Apps Script가 이 엔드포인트로 보낼 수 있는 필드) 기준이며, 실제 Google
 Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인할 수 없다.
 
+> **2026-08-22 갱신**: 전자일지는 기존 가족간병관리 시스템(이 Google
+> Form이 속한 시스템)의 하위 기능이 아니라, QR/OTP/전자간병일지 범위로
+> 역할이 확정되었다. QR 최초 등록에서 수집한 정보는 이제 등록 성공 시
+> 기존 시스템으로 자동 전송된다 — 전송 대상 필드/변환 규칙은
+> [docs/legacy-family-care-field-map.md](./legacy-family-care-field-map.md),
+> 전송 방식(웹훅 계약)은
+> [docs/legacy-sync-integration.md](./legacy-sync-integration.md) 참고.
+> 아래 표의 QR 등록 항목 중 환자 생년월일/간병개시 예정일/사고유형은 이번
+> 갱신으로 입력 방식이 바뀌었다(각 표의 해당 행 참고).
+>
+> **2026-08-23 갱신**: 실제 기존 가족간병관리 Google Sheet 헤더가
+> 확인되어 `docs/legacy-family-care-field-map.md`를 그 헤더 기준으로
+> 다시 작성했다. `admission_status`(현재상태)에 `cases.admission_status`
+> 컬럼이 추가되어 더 이상 버려지지 않고 기존 시스템으로 전송된다.
+> 보험사는 자유 입력에서 기존 Google Form 선택지를 동적으로 받아오는
+> `<select>`로 바뀌었다(작업 15~19, `GET /api/registration-options`).
+
 ## 간병인
 
 | 구분 | Google Form 항목 | QR 등록 항목 | DB 컬럼 | 필수 | 현재 상태 | 변환 규칙 |
@@ -20,10 +37,10 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 
 | 구분 | Google Form 항목 | QR 등록 항목 | DB 컬럼 | 필수 | 현재 상태 | 변환 규칙 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 현재 상태(입원 예정/입원 당일/입원 중) | **없음** | `admission_status`(화면에서만 수집) | **DB 컬럼 없음** | 아니오 | **화면에는 있지만 DB에 없는 항목** — `cases.status`("입원중"/"간병종료")는 의미가 달라 여기에 매핑하지 않는다(임의 매핑 금지 원칙) | 서버가 값을 받아도 저장하지 않고 버림(`app/api/cases/register/route.ts`에 명시 주석) — 후속 컬럼 추가 검토 필요 |
+| 현재상태(입원 예정/입원 당일/입원 중) | **없음** | `admission_status` | `cases.admission_status`(2026-08-23 추가) | 아니오 | **2026-08-23부터 DB에 저장되고 기존 시스템으로 전송됨** — `register_case_v3`의 `p_admission_status` 파라미터로 전달되어 신규 사례 생성과 같은 트랜잭션 안에서 저장된다(별도 UPDATE 없음). `cases.status`("입원중"/"간병종료")와는 여전히 별개 값(임의 매핑 금지 원칙 유지) | 저장값을 Sheet의 `현재상태` 표시값과 동일하게 공백 포함("입원 예정" 등)으로 맞춤(`ADMISSION_STATUS_OPTIONS`) |
 | 병원명 | 없음(구글폼은 hospital_id 개념이 없고 registration_no로만 매칭) | 읽기 전용, QR 토큰으로 서버가 재조회 | `cases.hospital_id` | 둘 다 사실상 필수(QR은 필수, Google Form은 애초에 병원 연결 없음) | Google Form 연동은 hospital_id를 아예 쓰지 않음(아래 "차이점") | QR: 서버가 `qr_token`/`hospital_code`로 재검증, 클라이언트가 보낸 hospital_id는 신뢰하지 않음 |
 | 입원호실 | `room_no` | `room_no` | `cases.room_no` | 아니오 | 동일 | 그대로 저장 |
-| 간병개시 예정일 | `care_start_date` | `care_start_date` | `cases.care_start_date` | 아니오 | 동일 | 그대로 저장(`date`) |
+| 간병개시 예정일 | `care_start_date` | `care_start_date` | `cases.care_start_date` | 아니오 | **2026-08-22부터 QR 화면은 `<input type="date">`(모바일 달력)로 입력, 자유 텍스트 입력 제거** | 그대로 저장(`date`) |
 | 간병종료 예정일 | `care_end_date` | `care_end_date` | `cases.care_end_date` | 아니오 | 동일(QR 화면에 "선택"으로 유지) | 그대로 저장 |
 
 ## 환자
@@ -31,17 +48,18 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 | 구분 | Google Form 항목 | QR 등록 항목 | DB 컬럼 | 필수 | 현재 상태 | 변환 규칙 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 환자 성명 | `patient_name` | `patient_name` | `cases.patient_name` | 둘 다 사실상 필수 | 동일 | 그대로 저장 |
-| 환자 생년월일 YYMMDD 6자리 | `patient_birth_date`(기존엔 완전한 날짜 문자열로 추정, 6자리 전송도 신규 지원) | `patient_birth_yymmdd` + `patient_birth_century` | `cases.patient_birth_date`(date) | 아니오(선택) | **선택값 형식이 서로 다름(통일 시도함)** | QR: 6자리+세기(1900대/2000대)를 서버에서 ISO date로 변환(`normalizePatientBirthDateParts`, 세기 임의 추정 금지 — 반드시 별도 입력받음). Google Form: 6자리(`^\d{6}$`)로 오면 같은 함수로 변환(`patient_birth_century` 필요), 아니면 기존처럼 그대로 통과(하위호환) |
+| 환자 생년월일 | `patient_birth_date`(기존엔 완전한 날짜 문자열로 추정, 6자리 전송도 지원) | `patient_birth_yyyymmdd`(8자리, 필수) | `cases.patient_birth_date`(date) | **QR: 필수(2026-08-22부터)** | **QR 화면은 8자리(YYYYMMDD) 필수 입력으로 변경, "(선택입력)" 문구와 19XX/20XX 세기 선택 UI 제거** | QR: 8자리를 서버에서 ISO date로 변환·실제 날짜 검증(`normalizePatientBirthDateYyyymmdd`). Google Form: 기존 방식(6자리+세기 또는 완전한 날짜 문자열) 그대로 유지 — `normalizePatientBirthDateParts()`는 계속 그 경로 전용으로 남겨둠, 이번 변경으로 건드리지 않음 |
 | 환자 성별 | `patient_gender` | `patient_gender` | `cases.patient_gender` | 아니오 | 저장값 동일("남"/"여") | `PATIENT_GENDER_OPTIONS` |
 | 환자 연락처 | `patient_phone` | `patient_phone` | `cases.patient_phone` | 아니오 | 동일 | 그대로 저장 |
 | 진단명 | `diagnosis_name` | `diagnosis_name` | `cases.diagnosis_name` | 아니오 | 동일 | 그대로 저장 |
-| 사고유형 | `accident_type`, `accident_type_etc` | `accident_type`, `accident_type_etc` | `cases.accident_type`, `cases.accident_type_etc` | 아니오 | 동일(자유 입력) | **선택값이 어느 쪽도 확정 목록이 아님** — 실제 Google Form의 선택 옵션을 이 저장소에서 확인할 수 없어 강제 드롭다운으로 만들지 않음(`ACCIDENT_TYPE_OPTIONS`는 빈 배열, 아래 "참고" 항목) |
+| 사고유형 | `accident_type`, `accident_type_etc` | `accident_type`, `accident_type_etc` | `cases.accident_type`, `cases.accident_type_etc` | 아니오 | **QR 화면은 2026-08-22부터 고정 select(질병/상해/교통사고)로 변경**(`accident_type_etc` 자유 입력은 유지) | `ACCIDENT_TYPE_OPTIONS`(`lib/registration-options.ts`)가 이 3개 값으로 채워짐 — 업무 지시로 고정한 값이며 실제 Google Form 옵션과 다를 수 있음(확인 필요, `docs/legacy-family-care-field-map.md` 참고). Google Form 경로는 여전히 자유 입력 |
 
 ## 보험
 
 | 구분 | Google Form 항목 | QR 등록 항목 | DB 컬럼 | 필수 | 현재 상태 | 변환 규칙 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 보험사 | `insurance_company` | `insurance_company` | `cases.insurance_company` | 아니오 | 동일(자유 입력) | 사고유형과 동일한 이유로 자유 입력 유지(`INSURANCE_COMPANY_OPTIONS` 빈 배열) |
+| 보험사 | `insurance_company` | `insurance_company` | `cases.insurance_company` | 아니오 | **2026-08-23부터 QR 화면은 기존 Google Form의 실제 선택지를 동적으로 받아오는 `<select>`(+"기타" 자유입력)** | `GET /api/registration-options` → `lib/legacy-registration-options.ts`가 기존 Apps Script config 엔드포인트를 조회(작업 15~19). Google Form 경로는 여전히 자유 입력 |
+| 보험사 "기타" 상세 | **없음** | `insurance_company_other` | `cases.insurance_company_other`(2026-08-23 추가) | 아니오 | **신규** — 보험사로 "기타"를 선택했을 때만 값이 채워짐. `register_case_v3`의 `p_insurance_company_other` 파라미터로 전달되어 admission_status와 동일하게 신규 사례 생성 트랜잭션 안에서 저장(별도 UPDATE 없음, RPC 내부에서 `insurance_company≠"기타"`면 예외로 거부) | 기존 시스템으로 "기타인 경우 입력해주세요" 컬럼에 전송 |
 | 담당설계사 | `planner_name` | `planner_name` | `cases.planner_name` | 아니오 | 동일 | 그대로 저장 |
 | 설계사 연락처 | `planner_phone` | `planner_phone` | `cases.planner_phone` | 아니오 | 동일 | 그대로 저장 |
 
@@ -59,23 +77,26 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 ## 사실대로 표시: 차이점 정리
 
 **화면에는 있지만 DB에 없는 항목**
-- `admission_status`(입원 예정/입원 당일/입원 중): QR 등록 화면에서 수집하지만 저장 컬럼이 없다. 서버가 값을 받아도 버린다(임의로 `cases.status`에 매핑하지 않음).
+- 없음(2026-08-23부터 `admission_status`도 `cases.admission_status`에 저장된다).
 
 **DB에는 있지만 QR 화면에서 받지 않는 항목**
 - 없음(이번 재구성으로 기존 QR 화면이 다루던 `cases` 컬럼은 전부 화면에 남아 있음).
 
-**Google Form Sync만 채우는 항목**
-- `registration_no`, `case_no`(자동 생성 가능), `family_code`(자동 생성 가능) — Google Form 경로 고유의 중복 방지/매칭 키. QR 등록은 `registration_no`를 항상 `null`로 둔다.
+**registration_no 형식이 서로 다름**
+- Google Form: 외부 시스템이 보낸 값을 그대로 저장(예: `260821-001` 형식으로 추정, 실제 확인 불가), 중복 방지 upsert 키(`onConflict: "registration_no"`).
+- QR 등록: 2026-08-22부터 서버가 `E{YYMMDD}-{3자리 일련번호}` 형식으로 채번해 저장한다(`generate_e_registration_no()`, `docs/legacy-family-care-field-map.md` 참고) — 이전에는 항상 `null`이었다. `E` 접두는 이 시스템 전용으로 예약되어 있어 Google Form 값과 겹치지 않는다.
+- `case_no`(자동 생성), `family_code`(자동 생성)는 두 경로 모두 자체 생성한다.
 - `source_type = "google_form"` (QR은 `"hospital_qr"`)
 
 **QR 등록만 채우는 항목**
 - 간병인 관련 전체(성명/주민등록번호/휴대전화/관계) — Google Form Sync는 `caregivers`/`case_caregivers`를 전혀 생성하지 않는다(`app/api/google-form-sync/route.ts`의 `GoogleFormSyncBody`에 해당 필드가 없음). 즉 Google Form으로 들어온 사례는 등록 시점에는 어떤 간병인과도 연결되지 않고, 이후 QR "가족간병인 추가"(`app/case-join`, 가족코드 필요) 절차를 별도로 거쳐야 간병인이 연결된다.
 - `case_consents`(동의 6개) — Google Form Sync는 동의 레코드를 만들지 않는다(간병인이 없으므로 `case_consents.caregiver_id`를 채울 대상이 없음).
-- `admission_status` — 화면 항목만 존재(위 참고).
+- `admission_status`/`insurance_company_other` — QR 등록만 채운다(Google Form 경로는 이 두 컬럼을 전혀 다루지 않는다).
 
 **선택값이 서로 다른 항목**
-- 환자 생년월일: Google Form은 기존에 완전한 날짜 문자열(예: `"1950-01-01"`)을 보냈던 것으로 보이고, QR은 이번 작업부터 "6자리 + 세기"로 입력받는다. 두 형식 모두 서버가 처리하도록 `lib/registration-validation.ts`의 `normalizePatientBirthDateParts()`를 공유한다.
-- 보험사/사고유형: 실제 Google Form의 선택 옵션 목록을 이 저장소에서 확인할 수 없어(외부 Google Form/Apps Script), `lib/registration-options.ts`의 `INSURANCE_COMPANY_OPTIONS`/`ACCIDENT_TYPE_OPTIONS`를 빈 배열로 두고 두 화면 모두 자유 입력을 유지했다. 실제 목록을 확인할 수 있게 되면 이 상수를 채우고 두 화면을 `<select>`로 통일할 것.
+- 환자 생년월일: Google Form은 기존 방식(완전한 날짜 문자열 또는 "6자리 + 세기")을 그대로 유지한다(`normalizePatientBirthDateParts()`). QR 등록은 2026-08-22부터 "8자리(YYYYMMDD, 필수)"로 바뀌었고 별도 함수(`normalizePatientBirthDateYyyymmdd()`)를 쓴다 — 두 경로가 서로 다른 함수를 쓰지만 둘 다 최종적으로 `cases.patient_birth_date`(ISO date)에 저장되는 것은 동일하다.
+- 보험사: QR 등록은 2026-08-23부터 기존 Google Form의 실제 선택지를 동적으로 조회하는 `<select>`를 쓴다(`GET /api/registration-options`, `docs/legacy-sync-integration.md` 2절). Google Form 경로는 여전히 자유 입력이다(값이 그 Form에서 직접 들어오므로 검증할 필요가 없다).
+- 사고유형: QR 등록 화면은 2026-08-22부터 실제 확인된 3개 값(질병/상해/교통사고, `ACCIDENT_TYPE_OPTIONS`)의 `<select>`를 쓴다(2026-08-23 확인 완료 — 더 이상 "다를 수 있음"이 아니라 확정값). Google Form 경로는 여전히 자유 입력이다.
 
 ## 참고: 이번 작업에서 다루지 않은 화면
 

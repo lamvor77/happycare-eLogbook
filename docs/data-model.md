@@ -11,6 +11,26 @@ domain.ts`, RLS 컬럼 단위 GRANT, 실제 select/insert 코드, `pre_rls_audit
 점검 쿼리에서 실제로 참조되는 컬럼만 근거로 정리했다. 이 문서에 없는
 컬럼이 DB에 더 있을 수 있다.
 
+## 0. 서비스 범위 (2026-08-22 확정)
+
+해피간병 전자일지는 가족간병 전체 업무관리 시스템으로 확장하지 않는다.
+역할이 다음과 같이 분리되어 있다:
+
+- **기존 가족간병관리 시스템**(이 저장소 밖, Google Form/Sheet/Apps
+  Script 기반): 등록관리, 서류발급관리, 보험사/설계사/소개자/적립금
+  관리 등 모든 업무관리의 최종 Source of Truth. 이 저장소는 이 시스템의
+  테이블/관리 화면을 새로 만들지 않는다.
+- **이 저장소(전자일지)**: 병원 QR, 간병인/환자 최초등록, Solapi OTP,
+  간병인 세션, 현재 간병인, 전자간병일지, 위치정보, 사진, 관리자 일지
+  확인까지로 범위가 제한된다.
+
+전자일지에서 등록된 정보는 관리자가 다시 입력할 필요 없이 기존
+시스템으로 자동 전송된다(`lib/legacy-sync.ts`,
+[docs/legacy-sync-integration.md](./legacy-sync-integration.md),
+[docs/legacy-family-care-field-map.md](./legacy-family-care-field-map.md))
+— 이 저장소는 그 전송 상태(`cases.legacy_sync_status` 등)만 보관하고,
+업무관리 마스터 데이터 자체는 갖지 않는다.
+
 ## 1. 시스템 개요
 
 ### 기술 스택 (`package.json` 기준)
@@ -102,7 +122,10 @@ DELETE는 `is_admin()`만 허용.
 | --- | --- |
 | case_id | `types/domain.ts CaseRecord`(PK로 추정) |
 | case_no | 〃, `lib/case-no.ts`(`C{YYMMDD}-{랜덤4자}` 형식으로 생성) |
-| registration_no | 〃, Google Form 동기화의 upsert 키(`onConflict: "registration_no"`) |
+| registration_no | 〃, Google Form 동기화의 upsert 키(`onConflict: "registration_no"`). QR 등록(`source_type='hospital_qr'`)은 2026-08-22부터 서버가 `E{YYMMDD}-{3자리}` 형식으로 채번한다(`generate_e_registration_no()`, 5절) — 그 이전엔 항상 null이었다 |
+| legacy_sync_status / legacy_synced_at / legacy_sync_error | `20260822090000_electronic_registration_no.sql` | 기존 가족간병관리 시스템으로의 전송 상태(`lib/legacy-sync.ts`). `pending`\|`synced`\|`failed`, Google Form 사례는 계속 null(동기화 대상 아님) — 8절 `POST /api/admin/cases/[id]/legacy-sync` 참고 |
+| admission_status | `20260823090000_legacy_sync_field_map.sql` | 현재상태(`"입원 예정"`\|`"입원 당일"`\|`"입원 중"`, 기존 Sheet 표시값과 동일). `register_case_v3`의 `p_admission_status` 파라미터로 전달되어 **신규 사례 생성과 같은 트랜잭션 안에서** 저장된다(RPC 성공 후 별도 UPDATE 없음 — 2026-08-23 원자성 보완). 기존 사례 재사용 분기는 `cases`를 전혀 UPDATE하지 않으므로 이 값을 건드리지 않는다 |
+| insurance_company_other | `20260823090000_legacy_sync_field_map.sql` | 보험사로 "기타"를 선택했을 때의 상세 입력값. `register_case_v3`의 `p_insurance_company_other` 파라미터로 전달되어 admission_status와 동일하게 신규 사례 생성 트랜잭션 안에서 저장된다. `insurance_company="기타"`일 때만 값이 있고, 그 외엔 null(RPC 내부에서도 `p_insurance_company <> '기타'`면 예외를 던져 강제) |
 | source_type | 〃, `"hospital_qr"` \| `"google_form"` |
 | family_code | 〃, 가족간병인 참여 코드(`FC-{timestamp}`) |
 | patient_name / patient_birth_date / patient_phone / patient_gender | 〃 |
@@ -378,7 +401,8 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 | `register_case`, `join_case`, `set_current_caregiver` | **레거시(사실상 사용 불가)** | `auth.uid()` 필수 검증이 있는데 caregiver가 더 이상 Supabase Auth를 안 써서 항상 `not_authenticated`로 실패한다. 롤백/호환용으로 DB에는 남아있음 |
 | `register_case_v2` | **레거시(호환용 유지, QR 등록은 더 이상 호출하지 않음)** | `app/api/cases/register/route.ts`가 `register_case_v3`로 전환됨(6절 아래 항목). v2 자체는 삭제하지 않았다 |
 | `join_case_v2`, `set_current_caregiver_v2` | **현재 사용** | `auth.uid()` 대신 `phone_normalized`/서버가 이미 검증한 `caregiver_id`를 파라미터로 받음. `authenticated`/`anon`에 GRANT 없음 — service_role만 호출 가능 |
-| `register_case_v3` | **현재 사용(QR 최초 등록)** | `20260806090100_case_consents.sql`. v2와 같은 신뢰 모델(service_role만 호출) + 간병인 주민등록번호는 암호화된 값(ciphertext/iv/auth_tag/key_version)만 파라미터로 받고 신규 caregiver 생성 시에만 필수로 검증 + `case_consents` 6개 항목을 같은 트랜잭션으로 insert. `app/case-join`(가족간병인 추가)은 여전히 `join_case_v2`를 쓴다 |
+| `register_case_v3` | **현재 사용(QR 최초 등록), 파라미터 33개** | 최초 정의(31개 파라미터)는 `20260806090100_case_consents.sql`. 2026-08-22 `20260822090000_electronic_registration_no.sql`이 CREATE OR REPLACE로 재정의(신규 사례 생성 시 `generate_e_registration_no()`로 등록번호 채번 + `legacy_sync_status='pending'` 설정 추가, 파라미터 수는 그대로 31개). 2026-08-23 `20260823090000_legacy_sync_field_map.sql`이 `p_admission_status`/`p_insurance_company_other` 2개를 추가(총 33개)하며 이전 31개 파라미터 시그니처를 명시적으로 `drop`해 오버로드가 남지 않도록 함 — **운영 DB에도 이미 이 33개 파라미터 버전이 적용되어 있음을 2026-08-23 직접 조회로 확인함.** 두 값 모두 **신규 사례 생성 분기의 INSERT문에서만** 채워지며(같은 트랜잭션, RPC 성공 후 별도 UPDATE 없음), 기존 사례 재사용 분기는 `cases` 테이블을 전혀 UPDATE하지 않으므로 기존 사례의 admission_status/insurance_company/insurance_company_other를 포함해 어떤 `cases` 컬럼도 덮어쓰지 않는다. v2와 같은 신뢰 모델(service_role만 호출) + 간병인 주민등록번호는 암호화된 값(ciphertext/iv/auth_tag/key_version)만 파라미터로 받고 신규 caregiver 생성 시에만 필수로 검증 + `case_consents` 6개 항목을 같은 트랜잭션으로 insert. `app/case-join`(가족간병인 추가)은 여전히 `join_case_v2`를 쓴다 |
+| `generate_e_registration_no()` | **신규(2026-08-22)** | `20260822090000_electronic_registration_no.sql`. `registration_no_counters`(날짜별 카운터, RLS 정책 없음 — service_role 전용) 테이블에 원자적 UPSERT로 날짜별 일련번호를 채번해 `E{YYMMDD}-{3자리}` 문자열을 반환한다. `register_case_v3`의 신규 사례 생성 분기에서만 호출됨 |
 | `is_admin()` | 사용 중 | `admin_users` 조회, `SECURITY DEFINER` |
 | `current_caregiver_id()`, `my_case_ids()` | **캐어기버 경로에서는 사실상 무력화**(4.3절) | 관리자 정책(`is_admin()`)의 OR 조건으로는 여전히 살아있음 |
 | `get_public_hospital()` | 사용 중 | anon/authenticated 실행 가능, `status='active'` 병원만 최소 컬럼 반환 |
@@ -403,6 +427,8 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 | `lib/registration-validation.ts` | 등록 화면 공통 검증 함수(주민등록번호 형식, 환자 생년월일 6자리+세기 변환, 동의 완료 여부) — 클라이언트/서버 공용, 암호화 로직 없음 |
 | `lib/case-no.ts` | `case_no` 생성 |
 | `lib/request-guard.ts` | Origin/Referer 기반 동일 출처 검증(CSRF 방어) |
+| `lib/legacy-sync.ts` | **신규(2026-08-22)**. 전자일지 → 기존 가족간병관리 시스템 아웃바운드 전송(`docs/legacy-sync-integration.md`). 간병인 주민등록번호 복호화는 이 파일이 유일한 호출부. payload key는 실제 기존 Sheet 헤더 문자열(`docs/legacy-family-care-field-map.md`) |
+| `lib/legacy-registration-options.ts` | **신규(2026-08-23)**. 기존 Google Form의 보험사/사고유형 선택지를 서버가 대신 조회(5분 캐시 + 마지막 성공값 폴백, `docs/legacy-sync-integration.md` 2절). `GET /api/registration-options`의 유일한 호출부 |
 
 ## 8. API 라우트 요약 (`app/api/**`)
 
@@ -422,6 +448,8 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 | `GET/POST /api/admin/hospitals`, `GET/PATCH /api/admin/hospitals/[id]`, `POST .../regenerate-qr` | `requireAdminApi` | |
 | `DELETE /api/admin/care-logs/[id]` | `requireAdminApi` | 소프트 삭제, 사유 5~500자 필수 |
 | `POST /api/admin/care-logs/[id]/restore` | `requireAdminApi` | 복원, 사유 5~500자 필수, 날짜 충돌 시 409 |
+| `POST /api/admin/cases/[id]/legacy-sync` | `requireAdminApi` | **신규(2026-08-22)**. 기존 가족간병관리 시스템 전송 실패 건 수동 재시도(`lib/legacy-sync.ts`) — 새 전송 로직 없이 기존 함수를 다시 호출 |
+| `GET /api/registration-options` | 없음(공개, 민감정보 없음) | **신규(2026-08-23)**. QR 등록 화면의 보험사/사고유형 선택지 — `lib/legacy-registration-options.ts`를 통해 기존 Apps Script config를 대신 조회 |
 
 ## 9. 알려진 제약 / 후속 과제
 
@@ -455,3 +483,13 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 - SQL 마이그레이션은 이 리포지토리에서 **자동 실행되지 않는다** — 운영
   DB에 실제로 적용됐는지는 이 문서만으로 알 수 없고, `supabase/
   migrations/checks/`의 점검 스크립트로 직접 확인해야 한다.
+- 기존 가족간병관리 시스템과의 연동은 "호출하는 쪽"만 구현되어 있다 —
+  실제 등록 수신 엔드포인트(`LEGACY_FAMILYCARE_WEBHOOK_URL`)와 보험사
+  옵션 조회 엔드포인트(`LEGACY_FAMILYCARE_CONFIG_URL`)는 운영팀이
+  별도로 구축/배포해야 하고, 그때까지는 모든 신규 QR 등록이
+  `legacy_sync_status='failed'`(`not_configured`)로 남고 보험사 목록은
+  빈 배열로 내려간다(등록 자체는 정상 처리됨). 실제 Sheet 헤더는
+  2026-08-23에 확인되었지만(`docs/legacy-family-care-field-map.md`),
+  "5. 확인 및 동의"/"타임스탬프"/"종료일"/"비고" 값 형식과 실제
+  엔드포인트 URL/인증 방식은 아직 확인되지 않았다(같은 문서 "운영팀
+  확인이 필요한 항목" 참고).

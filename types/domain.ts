@@ -43,8 +43,10 @@ export interface CaseRecord {
   diagnosis_name: string | null;
   room_no: string | null;
   insurance_company: string | null;
+  insurance_company_other: string | null;
   accident_type: string | null;
   accident_type_etc: string | null;
+  admission_status: string | null;
   planner_name: string | null;
   planner_phone: string | null;
   care_start_date: string | null;
@@ -53,6 +55,9 @@ export interface CaseRecord {
   status: string;
   hospital_id: string;
   created_at: string;
+  legacy_sync_status: string | null;
+  legacy_synced_at: string | null;
+  legacy_sync_error: string | null;
   hospitals?: Hospital | null;
   case_caregivers?: CaseCaregiver[];
 }

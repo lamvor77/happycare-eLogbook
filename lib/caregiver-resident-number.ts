@@ -100,10 +100,12 @@ export function encryptResidentNumber(digits13: string): EncryptedResidentNumber
 }
 
 /**
- * 암호화된 값을 원문으로 되돌린다. 이번 작업에서는 어떤 API 라우트도 이
- * 함수를 호출하지 않는다(원문 조회 기능은 별도 후속 작업 — 관리자
- * 재인증/조회 사유/감사 로그를 갖춘 전용 기능으로 분리하기로 함, 작업 H
- * 참고). 서버 전용이며, 호출 결과를 로그로 남기지 않는다.
+ * 암호화된 값을 원문으로 되돌린다. 현재 유일한 호출부는
+ * lib/legacy-sync.ts다 — 기존 가족간병관리 시스템이 업무상 필요로 하는
+ * 간병인 주민등록번호를 그 시스템으로 전송하기 직전에만 복호화한다.
+ * 전자일지 자체의 관리자 화면/조회 API는 이 함수를 호출하지 않는다(작업
+ * E — 일반 관리자 화면 표시 금지). 서버 전용이며, 호출 결과를 로그로
+ * 남기지 않는다.
  */
 export function decryptResidentNumber(encrypted: EncryptedResidentNumber): string {
   if (encrypted.keyVersion !== CURRENT_RRN_KEY_VERSION) {
