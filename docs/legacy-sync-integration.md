@@ -328,13 +328,13 @@ LEGACY_FAMILYCARE_CONFIG_URL=     # 보험사/사고유형 옵션 조회 엔드�
 
 ## 9. 이 저장소가 아직 확인하지 못한 것
 
-- 실제 두 엔드포인트(등록 수신/옵션 조회) URL이 이 계약(3~5절)대로
-  배포됐는지.
-- 기존 Sheet의 실제 헤더 행이 `docs/legacy-family-care-field-map.md`
-  1절의 28개 헤더와 정확히 일치하는지 — 하나라도 다르면
-  `legacy-webhook.gs`의 `getHeaderMap_()`이 그 헤더를 못 찾아 해당
-  컬럼만 조용히 비어서 저장된다(전체 실패는 아님, `등록번호` 헤더가
-  없을 때만 명시적으로 실패 처리됨).
+- ~~실제 두 엔드포인트(등록 수신/옵션 조회) URL이 이 계약(3~5절)대로
+  배포됐는지.~~ **2026-08-24 확인 완료 — 10절 참고.**
+- ~~기존 Sheet의 실제 헤더 행이 `docs/legacy-family-care-field-map.md`
+  1절의 28개 헤더와 정확히 일치하는지.~~ **2026-08-24 실제 등록 1건으로
+  일부 필드(보험사/사고유형/환자 생년월일/간병개시 예정일/타임스탬프)
+  매핑 확인 완료 — 10.5절 참고. 나머지 헤더는 여전히 실제 트래픽으로
+  개별 확인된 적 없음.**
 - `docs/legacy-family-care-field-map.md`에 남긴 필드명/값 형식 불확실
   항목 전체 — 특히 **"5. 확인 및 동의"는 실제 Google Form 응답 문자열을
   확인하기 전까지 payload에서 key 자체를 생략한다**(2026-08-23, 임의
@@ -344,3 +344,119 @@ LEGACY_FAMILYCARE_CONFIG_URL=     # 보험사/사고유형 옵션 조회 엔드�
 - `HAPPYCARE_UPSERT_ON_DUPLICATE`를 켤지(재전송 시 기존 행 갱신) 끌지
   (기본값, 새 행 추가 안 함)는 운영 정책 결정 사항 — 이 저장소가 대신
   결정하지 않는다.
+
+---
+
+## 10. 실제 운영 반영 이력 (2026-08-24)
+
+이 절은 위 1~9절의 "설계 계약"이 실제로 운영에 반영되는 과정에서 겪은
+장애와 그 해결, 그리고 그 결과 운영 DB/Apps Script에 실제로 존재하는
+상태를 기록한다. 향후 동일한 장애가 재발하면 이 절부터 확인한다.
+
+### 10.1 운영 DB 적용 이력 — 재실행 금지
+
+아래 8개 객체는 **운영 DB에 이미 적용되어 있고, 실제 QR 등록 1건
+(`E260824-002`)으로 끝까지(등록번호 채번 → Sheet 동기화) 동작이
+검증됐다.** 관련 migration 파일을 다시 실행하지 않는다 — 이미 존재하는
+객체에 대한 `create`/`alter`가 오류를 내거나(이미 존재), 의도치 않은
+재정의를 일으킬 수 있다.
+
+| 객체 | 적용한 파일 |
+| --- | --- |
+| `register_case_v3`(33 파라미터, `admission_status`/`insurance_company_other` 포함) | `supabase/migrations/20260823090000_legacy_sync_field_map.sql` |
+| `generate_e_registration_no()` | `supabase/migrations/20260824090000_restore_e_registration_no_generator.sql`(hotfix) |
+| `registration_no_counters` | 〃 |
+| `cases.legacy_sync_status` | `supabase/migrations/20260824091000_restore_legacy_sync_columns.sql`(hotfix) |
+| `cases.legacy_synced_at` | 〃 |
+| `cases.legacy_sync_error` | 〃 |
+| `cases.admission_status` | `supabase/migrations/20260823090000_legacy_sync_field_map.sql` |
+| `cases.insurance_company_other` | 〃 |
+
+`supabase/migrations/20260822090000_electronic_registration_no.sql`이
+원래 이 객체들을 전부 만들도록 설계됐지만, 운영 DB에는 그 파일 단독
+실행이 아니라 위 표의 파일들(+ hotfix 2건)이 합쳐진 결과로 반영되어
+있다 — 즉 20260822 파일을 그대로 재실행하면 이미 존재하는 객체와
+충돌할 수 있다.
+
+### 10.2 장애 진단/해결 이력 — Apps Script 연동
+
+실제 운영 반영 과정에서 순서대로 발견/해결한 문제들:
+
+1. **Apps Script는 커스텀 요청 헤더를 못 읽는다** — 그래서 시크릿을
+   헤더가 아니라 `POST` body의 `secret` 필드 / `GET` 쿼리 파라미터
+   `?secret=`로 전달하는 구조로 처음부터 설계했다(1~2절). 실제 운영
+   반영 중 이 설계가 그대로 맞았음을 재확인했다.
+2. **`HAPPYCARE_SYNC_SECRET`(Apps Script Script Properties)과
+   `LEGACY_FAMILYCARE_WEBHOOK_SECRET`(Vercel Production 환경변수)는
+   반드시 완전히 동일한 값이어야 한다** — 실제 반영 중 이 값이 **두
+   군데 모두에서 각각 별도로** 불일치를 일으켰다(아래 3, 이어서 Vercel
+   쪽은 별도로 한 번 더). 두 값 중 하나만 바꾸고 다른 쪽을 잊는 실수가
+   가장 흔한 실패 원인이므로, 시크릿을 교체할 때는 항상 양쪽을 함께
+   갱신하고 양쪽 다 재확인한다.
+3. **`secret_invalid` 진단 방법**: 실제 값을 출력하지 않고도 길이/문자
+   구성(영문·숫자·기호 여부)/앞뒤 몇 글자의 문자 코드만 비교하는
+   안전한 진단으로 "내가 보낸 값이 저장된 값과 다른지"를 확인할 수
+   있다 — 이 방법으로 처음에는 로컬 셸(Git Bash/MSYS2)이 `/`로
+   시작하는 시크릿 값을 자체적으로 손상시키던 문제였음을 찾아냈고
+   (내 쪽 원인), 이후 별도로 Apps Script Script Properties에 저장된
+   값 자체가 실제로 달랐던 것(운영 쪽 원인)도 같은 방법으로 구분해
+   찾아냈다.
+4. **`config_read_failed`(옵션 조회 실패) 원인 — Google Forms OAuth
+   scope 누락**: Apps Script 프로젝트의 `appsscript.json`
+   `oauthScopes`에 `https://www.googleapis.com/auth/forms`가 없으면
+   `FormApp.openById(...)`가 예외를 던진다. `spreadsheets`/`drive`
+   권한만으로는 부족하다.
+5. **scope를 추가해도 재승인 팝업이 안 뜰 때**: 이미 폭넓게 권한을
+   승인받은 오래된 Apps Script 프로젝트는 새로 추가된 scope 하나만으로
+   재동의 화면을 다시 띄우지 않는 경우가 있다. 이때는
+   `myaccount.google.com/permissions`에서 해당 Apps Script 프로젝트의
+   기존 액세스 권한을 완전히 제거한 뒤, 인자 없는 진단 함수(예:
+   `LegacySyncAuthorize.js`의 `authorizeLegacySyncScopes()`)를 편집기에서
+   다시 실행하면 전체 권한을 새로 묻는 동의 화면이 뜬다.
+6. **정상 승인 확인 기준**: `authorizeLegacySyncScopes()` 실행 로그
+   (Logger)에 `spreadsheetOk=true`, `formOk=true`가 남으면 정상이다.
+7. **`/api/registration-options` 정상 기준**: 응답이
+   `ok: true`이고, `insuranceCompanies.length > 0`이며, `stale: false`
+   여야 "지금 막 기존 시스템에서 최신 값을 성공적으로 받아왔다"로 볼 수
+   있다(`stale: true`면 과거 성공 캐시를 대신 내려주는 중이라는 뜻 —
+   2절 캐시 정책 참고).
+8. **`register_case_v3` 실행 시 DB 선행 객체 누락 장애**: 위 10.1절의
+   `generate_e_registration_no()`/`registration_no_counters`/
+   `legacy_sync_status` 등 컬럼이 운영 DB에 없어 신규 QR 등록 자체가
+   실패했다(각각 "function ... does not exist" / "column ... does not
+   exist" 오류).
+9. 위 8번은 hotfix migration 2건(10.1절 표)으로 복구 완료됐다 — 운영
+   DB에 이미 적용되어 있다.
+10. **SQL 재실행 주의**: 10.1절의 8개 객체는 모두 이미 존재한다. 관련
+    migration 파일을 다시 실행하지 않는다.
+
+### 10.3 Secret rotation 기록
+
+- 2026-08-24: 기존 가족간병관리 연동 공유 시크릿(`HAPPYCARE_SYNC_SECRET`
+  / `LEGACY_FAMILYCARE_WEBHOOK_SECRET`)을 새로 교체함.
+- Apps Script Script Property, Vercel Production 환경변수 양쪽 모두
+  갱신함.
+- 실제 값은 의도적으로 어디에도 기록하지 않음(이 문서, 커밋 메시지,
+  로그 전부 포함).
+
+### 10.4 Apps Script 보조 스크립트
+
+이 저장소 밖(Apps Script 프로젝트)에 있는 파일이라 이 저장소가 직접
+관리하지 않지만, 향후 참고용으로 기록한다:
+
+- `LegacySyncAuthorize.js` — 인자 없이 편집기에서 바로 실행할 수 있는
+  OAuth 재승인용 진단 함수(10.2절 5, 6번). 향후 scope 추가/재승인이
+  다시 필요할 때 재사용할 수 있으므로 **유지 권장**.
+- `LegacySyncSetup.js` — 실제 사용처/트리거/참조가 없는 것으로 확인된
+  일회성 설정 스크립트. clasp는 원격 파일을 삭제할 수 없어 이 저장소
+  쪽 자동화로는 지울 수 없다 — **운영팀이 Apps Script 편집기에서 수동
+  삭제할 후보**로만 기록해둔다(자동 삭제하지 않음).
+
+### 10.5 E2E 검증 결과
+
+2026-08-24, 실제 QR 등록 1건(`E260824-002`)으로 처음부터 끝까지 검증:
+QR 등록 화면 → 등록 성공 표시 → `cases`에 신규 행 1건(상태 정상,
+보험사 "삼성보험" 정상 반영) → `legacy_sync_status='synced'`(관리자
+화면 "기존 시스템 연동: 완료" 배지로 확인) → 기존 Google Sheet에
+동일 등록번호로 정확히 1행 추가, 보험사/사고유형/환자 생년월일/
+간병개시 예정일/타임스탬프 필드 모두 정상 매핑, 중복 행 없음.

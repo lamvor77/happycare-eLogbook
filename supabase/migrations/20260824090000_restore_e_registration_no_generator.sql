@@ -2,6 +2,12 @@
 -- Hotfix: 운영 DB에서 누락된 registration_no_counters/generate_e_registration_no()
 -- 만 복구한다 — 운영 DB에 자동 실행하지 않는다.
 -- ============================================================================
+-- [운영 DB 상태 — 2026-08-24] 이 hotfix는 운영 DB에 적용 완료됐고,
+-- registration_no_counters/generate_e_registration_no() 둘 다 실제 QR
+-- 등록 1건으로 정상 동작(E-등록번호 생성)까지 검증됐다. 재실행하지
+-- 않는다 — 상세 현황은 docs/legacy-sync-integration.md "운영 DB 적용
+-- 이력" 절 참고.
+-- ============================================================================
 -- 배경: 운영 DB 확인 결과 register_case_v3는 이미 최신 33파라미터 버전
 -- (p_admission_status/p_insurance_company_other 포함,
 -- 20260823090000_legacy_sync_field_map.sql)이 적용되어 있었지만,

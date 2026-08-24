@@ -2,6 +2,12 @@
 -- Hotfix: 운영 DB에서 누락된 cases.legacy_sync_status/legacy_synced_at/
 -- legacy_sync_error 컬럼만 복구한다 — 운영 DB에 자동 실행하지 않는다.
 -- ============================================================================
+-- [운영 DB 상태 — 2026-08-24] 이 hotfix는 운영 DB에 적용 완료됐고, 실제
+-- QR 등록 1건에서 legacy_sync_status='synced' + legacy_synced_at 기록 +
+-- legacy_sync_error=null까지 정상 동작이 검증됐다. 재실행하지 않는다 —
+-- 상세 현황은 docs/legacy-sync-integration.md "운영 DB 적용 이력" 절
+-- 참고.
+-- ============================================================================
 -- 배경: 운영 DB 조회 결과 cases.admission_status/insurance_company_other와
 -- 그 CHECK 제약은 이미 정상 존재했지만, legacy_sync_status/
 -- legacy_synced_at/legacy_sync_error 3개 컬럼은 누락되어 있었다. 그 결과
