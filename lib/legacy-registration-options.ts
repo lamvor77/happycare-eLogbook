@@ -66,7 +66,17 @@ export async function fetchLegacyRegistrationOptions(): Promise<FetchLegacyRegis
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(configUrl, {
+    // Google Apps Script Web App의 doGet(e)는 커스텀 요청 헤더를 읽을 수
+    // 없다(Apps Script의 알려진 제약) — 그래서 시크릿을 헤더가 아니라 쿼리
+    // 파라미터로 전달한다. 헤더도 함께 보내지만(다른 서버로 교체될 경우
+    // 대비, 무해함) Apps Script 쪽 실제 인증은 이 쿼리 파라미터를 본다
+    // (docs/google-apps-script/legacy-webhook.gs 참고).
+    const url = new URL(configUrl);
+    if (secret) {
+      url.searchParams.set("secret", secret);
+    }
+
+    const response = await fetch(url.toString(), {
       method: "GET",
       headers: secret ? { "x-legacy-sync-secret": secret } : {},
       signal: controller.signal,
@@ -80,6 +90,13 @@ export async function fetchLegacyRegistrationOptions(): Promise<FetchLegacyRegis
     }
 
     const body = await response.json();
+
+    // Apps Script doGet(e)도 스크립트가 예외로 죽지 않는 한 항상 HTTP
+    // 200을 반환하므로(secret_invalid 등 실패도 200으로 옴), 반드시 body의
+    // ok 필드까지 확인한다 — 2xx만으로는 실패를 놓칠 수 있다.
+    if (!body || body.ok !== true) {
+      throw new Error("config endpoint returned ok:false");
+    }
 
     const insuranceCompanies = Array.isArray(body?.insurance_companies)
       ? body.insurance_companies.filter((item: unknown) => typeof item === "string")

@@ -22,7 +22,15 @@ import { decryptResidentNumber } from "@/lib/caregiver-resident-number";
  *
  * 환경변수(.env.example):
  *   LEGACY_FAMILYCARE_WEBHOOK_URL — 기존 시스템이 수신할 HTTPS 엔드포인트
- *   LEGACY_FAMILYCARE_WEBHOOK_SECRET — 요청 헤더(x-legacy-sync-secret)로 보낼 공유 시크릿
+ *   LEGACY_FAMILYCARE_WEBHOOK_SECRET — 공유 시크릿
+ *
+ * 시크릿 전달 방식(중요): Google Apps Script Web App의 doPost(e)는 커스텀
+ * 요청 헤더를 읽을 수 없다(Apps Script의 알려진 제약 — e 객체에 parameter/
+ * postData/queryString은 있어도 headers는 없다). 그래서 시크릿은
+ * `x-legacy-sync-secret` 헤더로도 함께 보내지만(다른 종류의 수신 서버로
+ * 교체될 가능성에 대비한 하위 호환용, 무해함), **실제 인증 판단은 JSON
+ * body의 `secret` 필드로 한다** — docs/google-apps-script/legacy-webhook.gs
+ * 와 docs/legacy-sync-integration.md 참고.
  *
  * 개인정보 처리 원칙(작업 29):
  *   - 간병인 주민등록번호는 이 함수 안에서만 복호화하고, 요청 body를 만든
@@ -44,7 +52,8 @@ export type LegacySyncErrorCode =
   | "timeout"
   | "network_error"
   | "http_4xx"
-  | "http_5xx";
+  | "http_5xx"
+  | "invalid_response";
 
 export interface LegacySyncResult {
   ok: boolean;
@@ -76,6 +85,8 @@ function toSheetGender(value: string | null): string | null {
  * Supabase에 그대로 저장된다.
  */
 interface LegacySheetPayload {
+  /** Apps Script doPost(e)가 헤더를 읽을 수 없어 body로 함께 보내는 시크릿. */
+  secret: string;
   등록번호: string;
   현재상태: string | null;
   "간병인 성명": string | null;
@@ -207,6 +218,7 @@ export async function syncCaseToLegacySystem(caseId: string): Promise<LegacySync
     caseRow.insurance_company === "기타" ? caseRow.insurance_company_other : null;
 
   const payload: LegacySheetPayload = {
+    secret,
     등록번호: caseRow.registration_no,
     현재상태: caseRow.admission_status,
     "간병인 성명": caregiver?.caregiver_name || null,
@@ -250,6 +262,28 @@ export async function syncCaseToLegacySystem(caseId: string): Promise<LegacySync
       return { ok: false, errorCode };
     }
 
+    // Apps Script Web App은 스크립트 자체가 예외로 죽지 않는 한 항상 HTTP
+    // 200을 반환한다 — 성공/실패 여부는 반드시 body의 ok 필드로 판단해야
+    // 하고, response.ok(2xx)만으로는 실패를 놓칠 수 있다(작업 D/E). body
+    // 전체는 로그로 남기지 않는다 — ok만 확인하고 버린다.
+    let parsedOk = false;
+    try {
+      const responseBody = await response.json();
+      parsedOk =
+        responseBody != null &&
+        typeof responseBody === "object" &&
+        (responseBody as { ok?: unknown }).ok === true;
+    } catch {
+      parsedOk = false;
+    }
+
+    if (!parsedOk) {
+      await updateSyncStatus(caseId, "failed", "invalid_response");
+      return { ok: false, errorCode: "invalid_response" };
+    }
+
+    // action(inserted/duplicate/updated) 값과 무관하게 ok:true면 성공으로
+    // 처리한다 — 같은 등록번호로 재전송된 duplicate도 정상 동작이다(작업 D).
     await updateSyncStatus(caseId, "synced", null);
     return { ok: true };
   } catch (error) {
