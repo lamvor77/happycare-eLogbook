@@ -91,6 +91,16 @@ export default function CaseRegisterClient() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // 입력 오류 UX — 필드를 건드리기 전에는 오류를 보여주지 않는다.
+  // blur(또는 체크박스 변경) 시점에 해당 필드만 "touched"로 표시한다.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  function markTouched(field: string) {
+    setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  }
+
+  const hasInteracted = Object.keys(touched).length > 0;
+
   useEffect(() => {
     async function loadHospital() {
       if (!hospitalCode && !hospitalToken) return;
@@ -361,6 +371,37 @@ export default function CaseRegisterClient() {
     allConsentsChecked &&
     hasValidInsuranceCompany;
 
+  // 필드별 오류 메시지 — handleSubmit의 개별 검증/canSubmit의 각 조건과
+  // 1:1 대응하는 한국어 문구만 만든다. 주민번호/전화번호 실제 입력값은
+  // 어떤 메시지에도 포함하지 않는다(고정 문구만 사용).
+  const patientNameError = !patientName ? "환자 성명을 입력해주세요." : "";
+  const relationshipError = !relationship ? "환자와의 관계를 선택해주세요." : "";
+  const patientBirthError = !normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd)
+    ? "생년월일 8자리(YYYYMMDD)를 정확히 입력해주세요. 실제 존재하는 날짜인지 확인해주세요."
+    : "";
+  const caregiverNameError =
+    !hasSession && !caregiverName.trim() ? "간병인 성명을 입력해주세요." : "";
+  const residentNumberError =
+    !hasSession && !isValidResidentNumberFormat(residentNumberInput)
+      ? "간병인 주민등록번호 13자리를 정확히 입력해주세요."
+      : "";
+  const otpError = !otpVerified ? "휴대폰 인증을 완료해주세요." : "";
+  const insuranceCompanyError = !hasValidInsuranceCompany
+    ? "보험사를 선택하거나 직접 입력해주세요."
+    : "";
+  const consentsError = !allConsentsChecked ? "동의 항목을 모두 확인해주세요." : "";
+
+  const errorSummary = [
+    patientNameError,
+    relationshipError,
+    patientBirthError,
+    caregiverNameError,
+    residentNumberError,
+    otpError,
+    insuranceCompanyError,
+    consentsError,
+  ].filter(Boolean);
+
   if (checkingSession) {
     return <main className="p-8 text-gray-900">확인 중입니다...</main>;
   }
@@ -393,17 +434,35 @@ export default function CaseRegisterClient() {
                 간병인 성명
               </label>
               <input
-                className="w-full border p-3 rounded mb-3 text-gray-900 min-h-[44px]"
+                className={`w-full border p-3 rounded text-gray-900 min-h-[44px] ${
+                  touched.caregiverName && caregiverNameError
+                    ? "border-red-500"
+                    : ""
+                } ${touched.caregiverName && caregiverNameError ? "mb-1" : "mb-3"}`}
                 placeholder="성명"
                 value={caregiverName}
                 onChange={(e) => setCaregiverName(e.target.value)}
+                onBlur={() => markTouched("caregiverName")}
+                aria-invalid={Boolean(touched.caregiverName && caregiverNameError)}
+                aria-describedby={
+                  touched.caregiverName && caregiverNameError
+                    ? "caregiverName-error"
+                    : undefined
+                }
               />
+              {touched.caregiverName && caregiverNameError && (
+                <p id="caregiverName-error" className="text-xs text-red-600 mb-3">
+                  {caregiverNameError}
+                </p>
+              )}
 
               <label className="block text-sm font-bold text-gray-800 mb-1">
                 간병인 주민등록번호 (전체 13자리)
               </label>
               <input
-                className="w-full border p-3 rounded mb-1 text-gray-900 min-h-[44px]"
+                className={`w-full border p-3 rounded mb-1 text-gray-900 min-h-[44px] ${
+                  touched.residentNumber && residentNumberError ? "border-red-500" : ""
+                }`}
                 placeholder="000000-0000000"
                 type="text"
                 inputMode="numeric"
@@ -413,8 +472,20 @@ export default function CaseRegisterClient() {
                 onChange={(e) =>
                   setResidentNumberInput(autoFormatResidentNumberInput(e.target.value))
                 }
+                onBlur={() => markTouched("residentNumber")}
+                aria-invalid={Boolean(touched.residentNumber && residentNumberError)}
+                aria-describedby={
+                  touched.residentNumber && residentNumberError
+                    ? "residentNumber-error"
+                    : "residentNumber-help"
+                }
               />
-              <p className="text-xs text-gray-700 mb-3">
+              {touched.residentNumber && residentNumberError && (
+                <p id="residentNumber-error" className="text-xs text-red-600 mb-1">
+                  {residentNumberError}
+                </p>
+              )}
+              <p id="residentNumber-help" className="text-xs text-gray-700 mb-3">
                 가족간병인 등록 업무를 위해 전체 13자리가 필요합니다. 입력값은
                 암호화되어 저장되며, 원문은 이 화면 밖으로 남지 않습니다.
               </p>
@@ -425,9 +496,16 @@ export default function CaseRegisterClient() {
             환자와의 관계
           </label>
           <select
-            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
+            className={`w-full border p-3 rounded min-h-[44px] text-gray-900 ${
+              touched.relationship && relationshipError ? "border-red-500" : ""
+            }`}
             value={relationship}
             onChange={(e) => setRelationship(e.target.value)}
+            onBlur={() => markTouched("relationship")}
+            aria-invalid={Boolean(touched.relationship && relationshipError)}
+            aria-describedby={
+              touched.relationship && relationshipError ? "relationship-error" : undefined
+            }
           >
             <option value="">환자와의 관계 선택</option>
             {RELATIONSHIP_OPTIONS.map((option) => (
@@ -436,6 +514,11 @@ export default function CaseRegisterClient() {
               </option>
             ))}
           </select>
+          {touched.relationship && relationshipError && (
+            <p id="relationship-error" className="text-xs text-red-600 mt-1">
+              {relationshipError}
+            </p>
+          )}
         </section>
 
         {/* 3. 입원 정보 */}
@@ -514,16 +597,32 @@ export default function CaseRegisterClient() {
             환자 성명
           </label>
           <input
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+            className={`w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900 ${
+              touched.patientName && patientNameError ? "border-red-500" : ""
+            }`}
             value={patientName}
             onChange={(e) => setPatientName(e.target.value)}
+            onBlur={() => markTouched("patientName")}
+            aria-invalid={Boolean(touched.patientName && patientNameError)}
+            aria-describedby={
+              touched.patientName && patientNameError ? "patientName-error" : undefined
+            }
           />
+          {touched.patientName && patientNameError ? (
+            <p id="patientName-error" className="text-xs text-red-600 mb-3">
+              {patientNameError}
+            </p>
+          ) : (
+            <div className="mb-3" />
+          )}
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
             생년월일 8자리
           </label>
           <input
-            className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
+            className={`w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900 ${
+              touched.patientBirth && patientBirthError ? "border-red-500" : ""
+            }`}
             placeholder="YYYYMMDD"
             type="text"
             inputMode="numeric"
@@ -532,8 +631,20 @@ export default function CaseRegisterClient() {
             onChange={(e) =>
               setPatientBirthYyyymmdd(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))
             }
+            onBlur={() => markTouched("patientBirth")}
+            aria-invalid={Boolean(touched.patientBirth && patientBirthError)}
+            aria-describedby={
+              touched.patientBirth && patientBirthError
+                ? "patientBirth-error"
+                : "patientBirth-help"
+            }
           />
-          <p className="text-xs text-gray-700 mb-3">
+          {touched.patientBirth && patientBirthError && (
+            <p id="patientBirth-error" className="text-xs text-red-600 mb-1">
+              {patientBirthError}
+            </p>
+          )}
+          <p id="patientBirth-help" className="text-xs text-gray-700 mb-3">
             주민등록번호가 아닌 생년월일 8자리(예: 19500101)를 입력합니다.
           </p>
 
@@ -612,32 +723,64 @@ export default function CaseRegisterClient() {
                 보험사 목록을 불러오지 못했습니다. 보험사명을 직접 입력해주세요.
               </p>
               <input
-                className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+                className={`w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900 ${
+                  touched.insuranceCompany && insuranceCompanyError ? "border-red-500" : ""
+                }`}
                 value={insuranceCompany}
                 onChange={(e) => setInsuranceCompany(e.target.value)}
+                onBlur={() => markTouched("insuranceCompany")}
+                aria-invalid={Boolean(touched.insuranceCompany && insuranceCompanyError)}
+                aria-describedby={
+                  touched.insuranceCompany && insuranceCompanyError
+                    ? "insuranceCompany-error"
+                    : undefined
+                }
               />
+              {touched.insuranceCompany && insuranceCompanyError ? (
+                <p id="insuranceCompany-error" className="text-xs text-red-600 mb-3">
+                  {insuranceCompanyError}
+                </p>
+              ) : (
+                <div className="mb-2" />
+              )}
             </>
           ) : (
-            <select
-              className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
-              value={insuranceCompany}
-              onChange={(e) => {
-                setInsuranceCompany(e.target.value);
-                if (e.target.value !== INSURANCE_COMPANY_OTHER_VALUE) {
-                  setInsuranceCompanyOther("");
+            <>
+              <select
+                className={`w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900 ${
+                  touched.insuranceCompany && insuranceCompanyError ? "border-red-500" : ""
+                }`}
+                value={insuranceCompany}
+                onChange={(e) => {
+                  setInsuranceCompany(e.target.value);
+                  if (e.target.value !== INSURANCE_COMPANY_OTHER_VALUE) {
+                    setInsuranceCompanyOther("");
+                  }
+                }}
+                onBlur={() => markTouched("insuranceCompany")}
+                aria-invalid={Boolean(touched.insuranceCompany && insuranceCompanyError)}
+                aria-describedby={
+                  touched.insuranceCompany && insuranceCompanyError
+                    ? "insuranceCompany-error"
+                    : undefined
                 }
-              }}
-            >
-              <option value="">보험사 선택</option>
-              {insuranceCompanyOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-              {!insuranceCompanyOptions.includes(INSURANCE_COMPANY_OTHER_VALUE) && (
-                <option value={INSURANCE_COMPANY_OTHER_VALUE}>{INSURANCE_COMPANY_OTHER_VALUE}</option>
+              >
+                <option value="">보험사 선택</option>
+                {insuranceCompanyOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+                {!insuranceCompanyOptions.includes(INSURANCE_COMPANY_OTHER_VALUE) && (
+                  <option value={INSURANCE_COMPANY_OTHER_VALUE}>{INSURANCE_COMPANY_OTHER_VALUE}</option>
+                )}
+              </select>
+              {touched.insuranceCompany && insuranceCompanyError && (
+                <p id="insuranceCompany-error" className="text-xs text-red-600 mb-3">
+                  {insuranceCompanyError}
+                </p>
               )}
-            </select>
+            </>
           )}
 
           {insuranceCompany === INSURANCE_COMPANY_OTHER_VALUE && (
@@ -646,9 +789,12 @@ export default function CaseRegisterClient() {
                 기타인 경우 입력해주세요
               </label>
               <input
-                className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+                className={`w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900 ${
+                  touched.insuranceCompany && insuranceCompanyError ? "border-red-500" : ""
+                }`}
                 value={insuranceCompanyOther}
                 onChange={(e) => setInsuranceCompanyOther(e.target.value)}
+                onBlur={() => markTouched("insuranceCompany")}
               />
             </>
           )}
@@ -676,13 +822,18 @@ export default function CaseRegisterClient() {
         <section>
           <h2 className="font-bold mb-3">확인 및 동의</h2>
 
-          <label className="flex items-start gap-2 text-sm font-bold text-gray-900 mb-2 pb-2 border-b">
+          <label
+            className={`flex items-start gap-2 text-sm font-bold text-gray-900 mb-2 pb-2 border-b ${
+              touched.consents && consentsError ? "text-red-600" : ""
+            }`}
+          >
             <input
               type="checkbox"
               className="mt-1"
               checked={allConsentsChecked}
               onChange={(e) => {
                 const checked = e.target.checked;
+                markTouched("consents");
                 setConsents(() => {
                   const next = {} as Record<ConsentKey, boolean>;
                   for (const item of CONSENT_ITEMS) {
@@ -691,6 +842,10 @@ export default function CaseRegisterClient() {
                   return next;
                 });
               }}
+              aria-invalid={Boolean(touched.consents && consentsError)}
+              aria-describedby={
+                touched.consents && consentsError ? "consents-error" : undefined
+              }
             />
             <span>전체 동의</span>
           </label>
@@ -702,14 +857,24 @@ export default function CaseRegisterClient() {
                   type="checkbox"
                   className="mt-1"
                   checked={consents[item.key]}
-                  onChange={(e) =>
-                    setConsents((prev) => ({ ...prev, [item.key]: e.target.checked }))
+                  onChange={(e) => {
+                    markTouched("consents");
+                    setConsents((prev) => ({ ...prev, [item.key]: e.target.checked }));
+                  }}
+                  aria-invalid={Boolean(touched.consents && consentsError)}
+                  aria-describedby={
+                    touched.consents && consentsError ? "consents-error" : undefined
                   }
                 />
                 <span>{item.label}</span>
               </label>
             ))}
           </div>
+          {touched.consents && consentsError && (
+            <p id="consents-error" className="text-xs text-red-600 mt-2">
+              {consentsError}
+            </p>
+          )}
         </section>
 
         {/* 7. 인증 및 등록 */}
@@ -723,12 +888,24 @@ export default function CaseRegisterClient() {
               </label>
 
               <input
-                className="w-full border p-3 rounded mb-3 min-h-[44px] disabled:bg-gray-100 text-gray-900"
+                className={`w-full border p-3 rounded mb-1 min-h-[44px] disabled:bg-gray-100 text-gray-900 ${
+                  touched.otp && otpError ? "border-red-500" : ""
+                }`}
                 placeholder="휴대폰번호"
                 value={phone}
                 disabled={otpStep === "code"}
                 onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => markTouched("otp")}
+                aria-invalid={Boolean(touched.otp && otpError)}
+                aria-describedby={touched.otp && otpError ? "otp-error" : undefined}
               />
+              {touched.otp && otpError ? (
+                <p id="otp-error" className="text-xs text-red-600 mb-3">
+                  {otpError}
+                </p>
+              ) : (
+                <div className="mb-2" />
+              )}
 
               {otpStep === "phone" && (
                 <button
@@ -767,6 +944,22 @@ export default function CaseRegisterClient() {
             <p className="text-sm text-green-700 mb-3">
               휴대폰 인증이 완료되었습니다.
             </p>
+          )}
+
+          {hasInteracted && !canSubmit && errorSummary.length > 0 && (
+            <div
+              className="mb-3 border border-red-300 bg-red-50 rounded p-3"
+              role="alert"
+            >
+              <p className="text-sm font-bold text-red-700 mb-1">
+                등록 전 확인이 필요합니다
+              </p>
+              <ul className="text-xs text-red-700 list-disc list-inside space-y-0.5">
+                {errorSummary.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <button
