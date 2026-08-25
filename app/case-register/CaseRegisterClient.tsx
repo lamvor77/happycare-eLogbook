@@ -51,7 +51,6 @@ export default function CaseRegisterClient() {
   const [roomNo, setRoomNo] = useState("");
   const [careStartDate, setCareStartDate] = useState("");
   const [careEndDate, setCareEndDate] = useState("");
-  const [memo, setMemo] = useState("");
 
   // 4. 환자 정보
   const [patientName, setPatientName] = useState("");
@@ -286,7 +285,11 @@ export default function CaseRegisterClient() {
         room_no: roomNo,
         care_start_date: careStartDate || null,
         care_end_date: careEndDate || null,
-        memo,
+        // "비고" 입력 UI를 최초 등록 화면에서 제거했다(운영 요청) — 서버
+        // API 계약(memo 필드)/DB 컬럼(cases.memo)/legacy Sheet "비고"
+        // 컬럼은 그대로 유지하므로 빈 문자열을 보낸다. 기존에 이미 저장된
+        // memo 값이나 관리자 화면의 조회 기능에는 영향이 없다.
+        memo: "",
 
         patient_name: patientName,
         patient_birth_yyyymmdd: patientBirthYyyymmdd,
@@ -573,19 +576,10 @@ export default function CaseRegisterClient() {
             간병종료 예정일(선택)
           </label>
           <input
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
             type="date"
             value={careEndDate}
             onChange={(e) => setCareEndDate(e.target.value)}
-          />
-
-          <label className="block text-sm font-bold text-gray-800 mb-1">
-            비고
-          </label>
-          <textarea
-            className="w-full border p-3 rounded text-gray-900"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
           />
         </section>
 
