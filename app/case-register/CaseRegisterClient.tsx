@@ -676,6 +676,25 @@ export default function CaseRegisterClient() {
         <section>
           <h2 className="font-bold mb-3">확인 및 동의</h2>
 
+          <label className="flex items-start gap-2 text-sm font-bold text-gray-900 mb-2 pb-2 border-b">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={allConsentsChecked}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setConsents(() => {
+                  const next = {} as Record<ConsentKey, boolean>;
+                  for (const item of CONSENT_ITEMS) {
+                    next[item.key] = checked;
+                  }
+                  return next;
+                });
+              }}
+            />
+            <span>전체 동의</span>
+          </label>
+
           <div className="space-y-2">
             {CONSENT_ITEMS.map((item) => (
               <label key={item.key} className="flex items-start gap-2 text-sm text-gray-900">

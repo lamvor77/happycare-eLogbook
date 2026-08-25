@@ -54,7 +54,7 @@ Sheet의 컬럼명이다. 문자열을 임의로 바꾸지 않는다(예: `환�
 | 타임스탬프 | (없음) | `cases.created_at` | — | **전송 안 함** | 기존 Apps Script가 자동 생성하는 구조로 추정(운영팀 확인 필요) — 중복 타임스탬프 생성을 피하기 위해 이 저장소는 보내지 않는다 |
 | 현재상태 | 현재상태(입원 예정/입원 당일/입원 중) | `cases.admission_status` | 화면 저장값 그대로("입원 예정" 등, 공백 포함 — Sheet 값과 동일하게 맞춤) | **전송함** | `ADMISSION_STATUS_OPTIONS`(`lib/registration-options.ts`) |
 | 간병인 성명 | 간병인 성명 | `caregivers.caregiver_name` | 그대로 | **전송함** | Google Form Sync 경로는 caregiver를 만들지 않아 대응 없음 |
-| 간병인 주민등록번호 | 간병인 주민등록번호(전체 13자리) | `caregivers.resident_number_ciphertext` 등(암호화 저장) | 전송 직전에만 복호화 → 평문(작업 29) | **전송함** | 업무상 필요해 평문 전송(작업 7) — API 로그/case_history/전자일지 관리자 화면에는 절대 노출하지 않는다 |
+| 간병인 주민등록번호 | 간병인 주민등록번호(전체 13자리) | `caregivers.resident_number_ciphertext` 등(암호화 저장) | 전송 직전에만 복호화 → `formatResidentNumberWithHyphen()`(`lib/registration-validation.ts`, 화면 입력 검증과 동일 함수 재사용)으로 "900101-1234567" 형식 하이픈 삽입 후 전송(2026-08-25) | **전송함** | 업무상 필요해 평문 전송(작업 7) — API 로그/case_history/전자일지 관리자 화면에는 절대 노출하지 않는다. 하이픈 포맷은 payload 구성 시점(`lib/legacy-sync.ts`)에서만 적용하고 Apps Script는 개인정보를 재가공하지 않는다 — DB 저장값(암호문)/복호화 경계는 변경 없음 |
 | 간병인 연락처 | 간병인 연락처 | `caregivers.phone` | outbound(legacy-sync.ts)는 그대로 전송하지만, **`caregivers.phone`은 실제로는 E.164 정규화값("+8210...")이 저장되어 있다**(`register_case_v3`가 `phone`/`phone_normalized` 두 컬럼에 같은 값을 넣음 — `docs/data-model.md`의 "레거시 원본 형식" 설명은 이 경로에는 더 이상 맞지 않음, 2026-08-24 확인). Sheet에 쓸 때는 Apps Script `formatPhoneForSheet_()`가 "010-1234-5678" 형식으로 다시 변환한다 | **전송함** | Sheet 표시 형식은 `docs/legacy-sync-integration.md` 10.7절 참고 |
 | 환자 성명 | 환자 성명 | `cases.patient_name` | 그대로 | **전송함** | |
 | 환자 생년월일 | 생년월일 8자리(YYYYMMDD) | `cases.patient_birth_date` | 서버가 `normalizePatientBirthDateYyyymmdd()`로 검증 후 ISO date(`YYYY-MM-DD`)로 저장·전송 | **전송함** | 형식이 Sheet 기존 값과 다를 수 있음(운영팀 확인 필요 — 다른 형식이 필요하면 `lib/legacy-sync.ts`에서 변환 추가) |
@@ -68,7 +68,7 @@ Sheet의 컬럼명이다. 문자열을 임의로 바꾸지 않는다(예: `환�
 | 검토메모 | (없음) | (없음) | — | **전송 안 함** | 기존 시스템 후속 업무 전용(작업 25) |
 | 간병개시 예정일 | 간병개시 예정일(`<input type="date">`, 작업 14) | `cases.care_start_date` | 그대로(`YYYY-MM-DD`) | **전송함** | |
 | 종료일 | (없음) | `cases.care_end_date` | — | **전송 안 함** | 최초등록 시점엔 아직 확정되지 않는 값 — 기존 시스템의 종료 처리 업무에서 채워지는 컬럼으로 보고 전자일지가 최초 전송에 포함하지 않는다(운영팀 확인 필요) |
-| 5. 확인 및 동의 | 확인 및 동의 6개 체크박스 | `case_consents.*`(6개 boolean, Supabase에는 그대로 저장됨) | — | **전송 안 함(2026-08-23 보류)** | **실제 Google Form 응답 문자열 확인 후 활성화.** 이전에는 고정 문자열 `"동의함"`을 임시로 보냈으나, 실제 Apps Script/Sheet가 기대하는 값 형식(문자열/불리언/체크 항목 목록 등)이 확인되지 않아 임의 값을 보내지 않기로 했다(작업 21) — 이 컬럼이 필수라면 빈 값으로 행이 거부될 수 있으니, 실제 형식 확인 전까지는 payload에서 key 자체를 생략해 수신 측 기본 처리에 맡긴다. `lib/legacy-sync.ts`의 `LegacySheetPayload`에 필드를 추가하고 값을 채우면 활성화된다 |
+| 5. 확인 및 동의 | 확인 및 동의 6개 체크박스 | `case_consents.*`(6개 boolean, Supabase에는 그대로 저장됨) | 6개 모두 true일 때만 `LEGACY_CONSENT_RESPONSE`(`lib/legacy-sync.ts`) 고정 문자열, 아니면 `null` | **전송함(2026-08-25 확인 완료)** | **실제 Google Form 응답 문자열 확인 완료, 활성화됨.** 실제 정상 등록된 Form 행에서 확인한 문자열을 그대로 쓴다(임의로 만든 값 아님) — 6개 문장을 `", "`로 이어붙이고 각 문장 끝에 마침표+쉼표(`.,`)가 붙는 실제 형식을 그대로 유지한다. 전자일지 등록은 서버가 이미 6개 동의를 모두 강제하므로(`isConsentComplete`, `app/api/cases/register/route.ts`) 정상 등록 건은 항상 이 값이 채워진다 — `lib/legacy-sync.ts`가 전송 직전 `case_consents`를 다시 조회해 재확인한다(case_consents 저장 구조 자체는 미변경) |
 | 환자 성별 | 성별(남/여) | `cases.patient_gender` | `"남"→"남자"`, `"여"→"여자"`(Sheet 표시값에 맞춤, DB 저장값은 그대로 유지) | **전송함** | `toSheetGender()`(`lib/legacy-sync.ts`) |
 | 사고유형 | 사고유형(select, 질병/상해/교통사고 고정) | `cases.accident_type` | 그대로 | **전송함** | 서버가 이 3개 값 외에는 거부(작업 11) |
 | 기타인 경우 입력해주세요 | 보험사 "기타" 선택 시 상세 입력 | `cases.insurance_company_other` | 보험사가 "기타"일 때만 값 전송, 아니면 null | **전송함** | Sheet 헤더가 하나뿐이라 보험사 "기타" 상세만 매핑한다 — 사고유형은 "기타" 선택지가 없다(운영팀 확인 필요: 이 컬럼이 사고유형 기타에도 쓰이는지) |
@@ -112,8 +112,8 @@ Sheet의 컬럼명이다. 문자열을 임의로 바꾸지 않는다(예: `환�
 
 1. `환자 생년월일`을 기존 Sheet가 어떤 문자열 형식으로 기대하는지(현재
    ISO `YYYY-MM-DD`로 전송 중).
-2. `5. 확인 및 동의` 컬럼이 실제로 기대하는 값 형식 — 확인되기 전까지는
-   payload에서 이 key를 생략한다(현재 미전송).
+2. ~~`5. 확인 및 동의` 컬럼이 실제로 기대하는 값 형식~~ — **2026-08-25
+   확인 완료, 2절 표 참고.**
 3. `타임스탬프`를 이 저장소가 채워 보내야 하는지, 기존 Apps Script가
    수신 시각으로 자동 생성하는지.
 4. `종료일`/`비고`를 최초 전송에 포함해야 하는지(현재 보수적으로 미전송).

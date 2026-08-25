@@ -1,6 +1,7 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { decryptResidentNumber } from "@/lib/caregiver-resident-number";
+import { formatResidentNumberWithHyphen } from "@/lib/registration-validation";
 
 /**
  * 전자일지(QR 최초 등록) → 기존 가족간병관리 시스템 자동 전송.
@@ -73,16 +74,27 @@ function toSheetGender(value: string | null): string | null {
 }
 
 /**
+ * "5. 확인 및 동의" 컬럼에 넣을 값 — 기존 Google Form으로 실제 정상
+ * 등록된 행에서 확인한 Sheet 저장 문자열 그대로다(2026-08-25, 사용자
+ * 확인). 임의로 만든 값이 아니다 — 쉼표/쉼표 뒤 공백/마침표/문장 순서
+ * 전부 실제 값과 동일하게 유지한다. 전자일지 쪽에서 새로 만들지 않고
+ * 이 상수 하나로만 참조한다(외부에서 쓸 일이 없어 export하지 않음).
+ */
+const LEGACY_CONSENT_RESPONSE =
+  "간호통합병동은 가족간병 신청이 불가함을 확인했습니다., 등록한 간병인이 직접 간병해야 함을 확인했습니다., 허위 신청 시 본사가 책임지지 않음을 확인했습니다., 가족간병인 등록은 보험금 지급을 보장하지 않음을 확인했습니다., 본인은 입력한 내용이 사실과 다를 경우 보험금 지급이 제한될 수 있음을 확인합니다., 개인정보 수집 및 이용에 동의합니다.";
+
+/**
  * 기존 Sheet의 정확한 헤더 문자열을 key로 쓴다(docs/
- * legacy-family-care-field-map.md 3절). "5. 확인 및 동의" 컬럼은 이
- * 타입에 **일부러 포함하지 않는다** — 실제 Apps Script/Sheet가 기대하는
- * 값 형식(문자열/불리언/체크된 항목 목록 등)을 이 저장소에서 확인할 수
- * 없어(작업 21), 임의의 값("동의함" 등)을 보내면 수신 측 스키마와
- * 어긋나거나 잘못된 값이 영구히 기록될 위험이 있다. 값 형식이 확인되면
- * 이 인터페이스에 필드를 추가하고 payload에도 포함시킨다 — 그 전까지는
- * key 자체를 생략해 수신 측 기본 처리(빈 값 유지 등)에 맡긴다.
- * case_consents 자체(6개 boolean 동의 기록)는 이 변경과 무관하게 계속
- * Supabase에 그대로 저장된다.
+ * legacy-family-care-field-map.md 3절). "5. 확인 및 동의"는 2026-08-25
+ * 실제 Google Form 응답 문자열이 확인되어 활성화됐다(LEGACY_CONSENT_RESPONSE
+ * 참고) — case_consents 6개 항목이 모두 true일 때만 이 고정 문자열을
+ * 채운다(아래 syncCaseToLegacySystem에서 다시 조회해 확인). 전자일지
+ * 등록은 서버가 이미 6개 동의를 모두 강제하므로(app/api/cases/register/
+ * route.ts의 isConsentComplete 검증) 정상 등록 건은 항상 이 값이 채워지고,
+ * 이 값을 못 채우는 경우는 정상적으로 발생하지 않는다 — 그래도 이 파일
+ * 자체의 "클라이언트/이전 단계를 신뢰하지 않고 case_id로 다시 조회한다"는
+ * 기존 원칙을 그대로 지켜 여기서도 다시 확인한다. case_consents 저장
+ * 구조 자체는 변경하지 않는다.
  */
 interface LegacySheetPayload {
   /** Apps Script doPost(e)가 헤더를 읽을 수 없어 body로 함께 보내는 시크릿. */
@@ -105,6 +117,7 @@ interface LegacySheetPayload {
   "환자 성별": string | null;
   사고유형: string | null;
   "기타인 경우 입력해주세요": string | null;
+  "5. 확인 및 동의": string | null;
 }
 
 async function updateSyncStatus(
@@ -217,12 +230,40 @@ export async function syncCaseToLegacySystem(caseId: string): Promise<LegacySync
   const otherDetail =
     caseRow.insurance_company === "기타" ? caseRow.insurance_company_other : null;
 
+  // "5. 확인 및 동의"는 case_consents 6개 항목이 모두 true일 때만 채운다.
+  // 등록 시점에 서버가 이미 6개 모두를 강제하므로(app/api/cases/register/
+  // route.ts) 정상 등록 건은 항상 true지만, 클라이언트/이전 단계를
+  // 신뢰하지 않는 이 파일의 기존 원칙대로 case_id로 다시 조회해 확인한다.
+  const { data: consent } = await admin
+    .from("case_consents")
+    .select(
+      "integrated_care_ward_confirmed, direct_care_confirmed, false_application_confirmed, insurance_not_guaranteed_confirmed, information_accuracy_confirmed, privacy_consent_confirmed"
+    )
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  const allConsentsConfirmed = Boolean(
+    consent?.integrated_care_ward_confirmed &&
+      consent?.direct_care_confirmed &&
+      consent?.false_application_confirmed &&
+      consent?.insurance_not_guaranteed_confirmed &&
+      consent?.information_accuracy_confirmed &&
+      consent?.privacy_consent_confirmed
+  );
+
   const payload: LegacySheetPayload = {
     secret,
     등록번호: caseRow.registration_no,
     현재상태: caseRow.admission_status,
     "간병인 성명": caregiver?.caregiver_name || null,
-    "간병인 주민등록번호": caregiverResidentNumber,
+    // 복호화 직후 13자리 순수 숫자를 기존 가족간병관리 Sheet 표시 형식
+    // ("900101-1234567")으로 변환한다 — 화면 입력 검증에도 이미 쓰는
+    // lib/registration-validation.ts의 formatResidentNumberWithHyphen을
+    // 그대로 재사용한다(새 formatter 없음). 이 값을 담는 변수는 여기
+    // payload 구성 시점 이후로 더 참조하지 않는다(기존 원칙 그대로).
+    "간병인 주민등록번호": caregiverResidentNumber
+      ? formatResidentNumberWithHyphen(caregiverResidentNumber)
+      : caregiverResidentNumber,
     "간병인 연락처": caregiver?.phone || null,
     "환자 성명": caseRow.patient_name,
     "환자 생년월일": caseRow.patient_birth_date,
@@ -237,6 +278,7 @@ export async function syncCaseToLegacySystem(caseId: string): Promise<LegacySync
     "환자 성별": toSheetGender(caseRow.patient_gender),
     사고유형: caseRow.accident_type,
     "기타인 경우 입력해주세요": otherDetail,
+    "5. 확인 및 동의": allConsentsConfirmed ? LEGACY_CONSENT_RESPONSE : null,
   };
   // 이 지점 이후로는 caregiverResidentNumber(원문)를 fetch 요청 body 구성
   // 외의 용도로 참조하지 않는다 — 로그/응답/DB 어디에도 다시 담지 않는다.

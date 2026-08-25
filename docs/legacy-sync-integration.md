@@ -694,3 +694,73 @@ function processReceptionRow_(sheet, row) {
 오류메모 없음. 사용자가 보호자·설계사 알림톡을 실제로 수신했음을
 확인함 — Google Form 경로와 전자일지 경로가 `processReceptionRow_`를
 공유하는 구조가 실제 운영에서 정상 동작함을 검증했다.
+
+### 10.11 간병인 주민등록번호 Sheet 표시 형식 (2026-08-25)
+
+**증상**: 간병인 주민등록번호가 기존 가족간병관리 Sheet에 하이픈 없이
+13자리 숫자로만 저장됨 — 기존 표시 형식("900101-1234567")과 다름.
+
+**원인**: `caregivers`에는 원래부터 하이픈 없는 순수 13자리 숫자만
+암호화되어 저장된다(등록 화면에서 `normalizeResidentNumber()`가 먼저
+하이픈을 제거한 뒤 암호화). `lib/legacy-sync.ts`는 전송 직전 이
+값을 복호화한 뒤 **형식 변환 없이 그대로** payload에 넣고 있었다.
+
+**수정**: 새 formatter를 만들지 않고, 화면 입력 검증에 이미 쓰고 있는
+`lib/registration-validation.ts`의 `formatResidentNumberWithHyphen()`을
+`lib/legacy-sync.ts`가 payload를 구성하는 시점(복호화 직후, 전송
+직전)에 그대로 재사용한다. 이미 하이픈이 있으면(13자리가 아니게 되므로)
+원본을 그대로 반환해 중복 하이픈이 생기지 않는다. 13자리가 아닌 값은
+임의로 추측/보정하지 않고 원본 그대로 전송한다.
+
+**적용 위치를 legacy-sync.ts로 정한 이유**: 복호화(평문 노출)가
+이미 이 파일의 이 지점(서버 전용 경계, 전송 직전)에서만 일어나도록
+설계돼 있다(6절 개인정보 처리 원칙). Apps Script 쪽에서 원문을 다시
+가공하게 하면 평문이 노출되는 지점이 하나 더 늘어나는 셈이라, 기존
+경계를 그대로 유지하는 이 위치가 더 안전하다고 판단했다. DB
+저장값(암호문)/로그/case_history/관리자 화면 노출 범위는 전혀
+바뀌지 않았다.
+
+### 10.12 "현재상태"(admission_status) — 조사 진행 중 (2026-08-25)
+
+`app/case-register/CaseRegisterClient.tsx`(UI 선택값) →
+`app/api/cases/register/route.ts`(`p_admission_status`) →
+`supabase/migrations/20260823090000_legacy_sync_field_map.sql`의
+`register_case_v3`(INSERT 컬럼/VALUES 정렬 확인) → `lib/legacy-sync.ts`
+(`현재상태: caseRow.admission_status`, SELECT 목록에 `admission_status`
+포함 확인) → `legacy-webhook.gs`의 `buildRowFromHeaderMap_`(헤더
+목록에 "현재상태" 포함, 특별 제외 없음) — **이 저장소 코드는 4단계
+전부 정적으로 확인했고 문제를 찾지 못했다.**
+
+**중간 확인 결과(2026-08-25)**: Supabase SQL Editor에서
+`select registration_no, admission_status from public.cases where
+registration_no = 'E260825-001'`를 실행한 결과는 `admission_status =
+NULL`이 아니라 **"Success. No rows returned"(행 자체가 없음)** 이었다
+— 이 둘은 원인이 완전히 다르므로 반드시 구분한다. `registration_no`가
+Sheet에 존재한다고 해서 `cases.registration_no`에도 같은 값이 있다고
+가정하지 않는다 — Sheet의 "등록번호" 값은 `lib/legacy-sync.ts`가
+`caseRow.registration_no`(요청 시점에 DB에서 다시 조회한 값)를 그대로
+보낸 것이므로, 동기화가 성공했다면 **그 시점에는** 해당
+`registration_no`를 가진 `cases` 행이 존재했어야 한다는 논리적 근거는
+있다 — 그런데도 지금 조회에서 행 자체가 없다면, 가장 유력한 설명은
+**SQL Editor가 Production이 실제로 쓰는 것과 다른 Supabase
+프로젝트를 보고 있다는 것**이다. Vercel Production이 실제로 쓰는
+Supabase 프로젝트 호스트명은 공개 배포 번들에서 직접 확인했다
+(`NEXT_PUBLIC_SUPABASE_URL`이라 비밀값이 아님) —
+`abayfpcmdfpjkewseaha.supabase.co`. 사용자의 SQL Editor가 연 프로젝트의
+호스트명/project ref가 이것과 같은지 확인이 필요하다(완료 보고 참고).
+이 프로젝트는 과거에도 마이그레이션 파일과 실제 운영 DB에 적용된 함수
+본문이 서로 다른 사례(10.1절)가 있었으므로 그 가능성도 완전히
+배제하지는 않지만, "행 없음"이라는 이번 결과 자체는 프로젝트 불일치
+쪽 설명과 더 맞는다. SQL 실행이 금지되어 있어 이 저장소 쪽에서는 더
+확인하지 못했다.
+
+### 10.13 "5. 확인 및 동의" 활성화 (2026-08-25)
+
+기존 Google Form으로 실제 정상 등록된 행에서 확인한 실제 Sheet 저장
+문자열을 `lib/legacy-sync.ts`의 `LEGACY_CONSENT_RESPONSE` 상수로
+등록했다(2절 참고, 문서 밖에 값을 반복하지 않도록 이 상수 하나만
+참조). `case_consents` 6개 항목을 전송 직전 다시 조회해 모두 true일
+때만 이 문자열을 채우고, 하나라도 false면(정상 등록 흐름에서는 발생하지
+않음) `null`을 보낸다 — 과거 임시로 썼던 `"동의함"` 같은 임의 값은
+다시 쓰지 않았다. `case_consents` 저장 구조/검증 로직은 변경하지
+않았다.
