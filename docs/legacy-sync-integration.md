@@ -460,3 +460,237 @@ QR 등록 화면 → 등록 성공 표시 → `cases`에 신규 행 1건(상태 
 화면 "기존 시스템 연동: 완료" 배지로 확인) → 기존 Google Sheet에
 동일 등록번호로 정확히 1행 추가, 보험사/사고유형/환자 생년월일/
 간병개시 예정일/타임스탬프 필드 모두 정상 매핑, 중복 행 없음.
+
+### 10.6 "처리상태" 신규 행 기본값 (2026-08-24)
+
+기존 가족간병관리 시스템은 Sheet의 "처리상태" 컬럼이 "접수"여야 이후
+알림톡 발송과 후속 자동화가 정상 동작한다. 이 값은 전자일지가 정하는
+값이 아니므로(4절/`docs/legacy-family-care-field-map.md` "전송하지
+않는 이유" 참고), **`lib/legacy-sync.ts`의 outbound payload에는 여전히
+포함하지 않는다** — 대신 수신측 Apps Script의 `buildRowFromHeaderMap_`
+(`docs/google-apps-script/legacy-webhook.gs`)이 **신규 행을 생성할
+때만(`isUpdate=false`)** "처리상태" 컬럼에 "접수"를 직접 채운다.
+
+- 신규 삽입(`action: "inserted"`): 처리상태="접수", 타임스탬프=현재시각
+  (10.6절 대상, 6절 기존 동작과 함께 적용됨).
+- 중복 수신(`HAPPYCARE_UPSERT_ON_DUPLICATE`가 기본값 `false`일 때,
+  `action: "duplicate"`): 기존 행에 아무 것도 쓰지 않으므로 처리상태도
+  그대로 유지된다(기존 동작 그대로, 변경 없음).
+- 업데이트(`HAPPYCARE_UPSERT_ON_DUPLICATE="true"`일 때,
+  `action: "updated"`): `buildRowFromHeaderMap_`이 업데이트 대상 행의
+  현재 "처리상태" 셀 값을 다시 읽어 그대로 유지한다 — "완료"/"진행중"
+  등 이미 진행 중인 업무 상태를 "접수"로 되돌리지 않는다. 현재 운영은
+  `HAPPYCARE_UPSERT_ON_DUPLICATE="false"`라 이 경로는 실제로 쓰이지
+  않지만, 향후 켜지더라도 안전하도록 미리 반영했다.
+- 검토메모/종료일/비고/알림 4종/오류메모/"5. 확인 및 동의" 등 다른
+  후속관리 컬럼은 이번 변경과 무관하다 — 신규/재전송 어느 경로에서도
+  전자일지가 임의 값을 채우지 않는 기존 정책을 그대로 유지한다.
+- 이 변경은 아직 실제 Apps Script 프로젝트에 배포되지 않았다 — 문서/
+  코드 수정 및 로컬 검증까지만 완료된 상태.
+
+### 10.7 Sheet 전화번호 표시 형식 (2026-08-24)
+
+**Supabase 내부 전화번호 정규화 형식과 기존 가족간병관리 Sheet 표시
+형식은 분리한다.** `caregivers.phone_normalized`(OTP/Solapi/세션
+조회에 쓰는 E.164 값, `lib/phone.ts`의 `toE164()`)와 Sheet에 실제로
+표시되는 "010-1234-5678" 문자열은 서로 다른 목적의 값이며, 이 절의
+변경은 Sheet 표시값에만 영향을 준다 — Supabase에 저장된 어떤 전화번호
+컬럼도 이 변경으로 바뀌지 않는다.
+
+**증상**: 간병인 연락처는 Sheet에 "82010..."처럼 국가번호가 붙은 채로,
+환자/설계사 연락처는 맨 앞자리 "0"이 빠진 채로 기록됐다.
+
+**원인 (코드로 확인, 2026-08-24)**:
+- Apps Script 코드 자체에는 `Number()`/`parseInt()` 등 숫자 변환이
+  전혀 없다 — 문제는 Google Sheets가 `setValues()`/`appendRow()`로
+  들어오는, 숫자로만 이루어진 문자열을 자동으로 숫자로 인식해 맨 앞의
+  "+"나 "0"을 지워버리는 동작이다.
+- **간병인 연락처**: `register_case_v3`(`supabase/migrations/
+  20260823090000_legacy_sync_field_map.sql` 181~195행)가 신규 간병인을
+  만들 때 `phone`과 `phone_normalized` 두 컬럼에 **같은 값**
+  (`p_caregiver_phone_normalized`, 즉 `toE164()`를 거친 E.164 값
+  "+8210...")을 넣는다. `lib/legacy-sync.ts`는 `caregivers.phone`을
+  그대로 읽어 payload에 담으므로, legacy-sync 단계에 도달하기 전에
+  이미 "+8210..." 형태다. `docs/data-model.md`가 설명하는 "phone은
+  레거시 원본 형식" 전제는 이 경로(`register_case_v3`)에는 더 이상
+  맞지 않는다 — Sheets에 그대로 쓰면 "+"가 사라지고 숫자만 남아
+  "82010..."으로 보인다.
+- **환자/설계사 연락처**: `cases.patient_phone`/`cases.planner_phone`은
+  등록 화면에 입력한 문자열을 변환 없이 그대로 저장·전송한다
+  (`app/case-register/CaseRegisterClient.tsx`의 입력창은 자동
+  하이픈 포맷 없이 순수 텍스트 입력이다) — 사용자가 하이픈 없이
+  "01012345678"처럼 입력하면 그 형태 그대로 Sheet까지 전달되고,
+  Sheets가 이를 숫자로 인식해 맨 앞 "0"이 사라진다.
+- 즉 두 증상 모두 **Sheets의 자동 숫자 인식**이 공통 원인이고,
+  간병인 연락처는 여기에 더해 "Supabase에 이미 E.164로 저장돼 있다"는
+  선행 요인이 겹친 것이다.
+
+**수정**: `docs/google-apps-script/legacy-webhook.gs`에
+`formatPhoneForSheet_()`를 추가하고, `buildRowFromHeaderMap_`이 "간병인
+연락처"/"환자 연락처"/"설계사 연락처" 3개 컬럼에 한해 이 함수를 거친
+값을 Sheet 행에 쓴다. 이 함수는 입력이 "+8210...", "8210...",
+"010...", "010-...-...." 중 무엇이든 국내 휴대폰 번호 패턴이면
+"010-1234-5678" 형식으로 통일하고, 패턴에 맞지 않는 값(전화번호가
+아니거나 형식이 불확실한 값)은 임의로 추측해 바꾸지 않고 원본 그대로
+둔다. `lib/legacy-sync.ts`와 Supabase 저장값은 변경하지 않았다 — 오직
+Apps Script가 Sheet 셀에 쓰는 표시 문자열만 변환한다.
+
+**알려진 한계**: 하이픈이 아예 없는 국내 휴대폰 패턴 외의 숫자 문자열
+(예: 유선번호를 하이픈 없이 입력한 경우)은 이 함수가 원본을 그대로
+반환하므로, 여전히 Sheets가 숫자로 잘못 인식할 수 있다 — 이번 변경
+범위는 국내 휴대폰 번호(010/011/016/017/018/019)로 한정한다.
+
+### 10.8 접수 처리/알림톡 — Google Form과 전자일지 공통 함수 (2026-08-24)
+
+**증상**: 전자일지 QR 등록 건은 Sheet에 정상 반영(처리상태="접수" 포함)
+되는데도, 기존 가족간병관리 시스템의 접수 알림톡이 발송되지 않았다.
+
+**원인**: 접수 알림톡은 `Code.js`의 `onFormSubmit(e)`에서만 실행된다.
+이 함수는 스프레드시트에 등록된 **설치형 "양식 제출 시(On form
+submit)" 트리거**이며, 이 트리거 유형은 실제 Google Form 제출
+이벤트에만 반응하도록 플랫폼 차원에서 고정되어 있다 — 전자일지의
+`doPost`가 `SpreadsheetApp`으로 직접 `appendRow()`해서 행을 추가해도
+(같은 Apps Script 프로젝트 안에서 실행되더라도) 이 트리거는 발동하지
+않는다. 그 결과 전자일지 등록 건은 `처리상태="접수"`까지는
+`buildRowFromHeaderMap_`이 채우지만, 그 값을 신호로 알림을 보내는
+유일한 진입점이 아예 호출되지 않았다.
+
+**수정**: 알림톡 로직을 복제하지 않고, 기존 `onFormSubmit(e)`의
+검증된 본문을 `processReceptionRow_(sheet, row)`로 그대로 추출해
+Google Form 경로와 전자일지 경로가 **같은 함수**를 호출하도록
+연결했다.
+
+```
+Google Form:
+  Form 제출
+  → (Forms-Sheets 연동이 응답 행을 Sheet에 추가)
+  → "양식 제출 시" 설치형 트리거 발동
+  → onFormSubmit(e)
+  → processReceptionRow_(sheet, row)
+  → 등록번호 채번(없으면)/처리상태="접수"/전화번호 정규화/접수
+    알림톡(보호자·설계사)/직원 알림
+
+전자일지:
+  legacy webhook doPost
+  → (신규 등록번호 → Sheet에 새 행 INSERT, action:"inserted")
+  → processReceptionRow_(sheet, 방금 추가된 행 번호)  ← Form과 동일 함수
+  → 위와 동일한 접수 처리/알림톡 로직 실행
+```
+
+- **duplicate**(`HAPPYCARE_UPSERT_ON_DUPLICATE`가 기본값 `false`일 때
+  동일 등록번호 재수신): `processReceptionRow_`를 호출하지 않는다 —
+  기존 행에 아무 것도 쓰지 않으므로 접수 알림도 재발송되지 않는다.
+- **update**(`HAPPYCARE_UPSERT_ON_DUPLICATE="true"`일 때): 이 경로도
+  `processReceptionRow_`를 호출하지 않는다 — 처리상태는 10.6절대로
+  기존 값을 보존하고, 접수 알림도 다시 보내지 않는다.
+- **신규 INSERT일 때만** 정확히 1회 호출된다.
+
+**행 번호 동시성**: `appendRow()` 이후 별도로 `getLastRow()`를 호출해
+"방금 추가한 행 번호"를 얻는 방식은, 그 사이 동시 요청이 다른 행을
+추가하면 남의 행 번호를 잘못 잡을 위험이 있다. `doPost`는 중복검사 →
+행 쓰기 → 행 번호 확정 구간 전체를 `LockService.getScriptLock()`으로
+감싸 이 위험을 없앴다. `processReceptionRow_`(구 `onFormSubmit` 본문)
+자신도 동일한 스크립트 락을 내부에서 획득하므로, `doPost`는 이 락을
+**먼저 해제한 뒤** `processReceptionRow_`를 호출한다 — 같은 실행
+안에서 같은 락을 중첩 획득하려다 생길 수 있는 위험을 구조적으로
+피하기 위함이다(같은 실행 내 재진입 시 Apps Script의 실제 동작이
+불확실해 추측으로 중첩 lock을 두지 않았다).
+
+**알림 실패와 Sheet 동기화 성공을 분리**: Sheet 행 저장(=전자일지
+기준 "동기화 성공")과 접수 알림톡 발송 성공은 별개다.
+`processReceptionRow_` 내부는 기존 Google Form 경로와 동일하게 알림
+실패 시 "오류메모"에 기록하고 예외를 다시 던지는 구조를 그대로
+유지한다(이 내부 구조는 바꾸지 않았다). 다만 `doPost`는 이
+`processReceptionRow_` 호출을 별도 `try/catch`로 감싸, 예외가
+`doPost` 응답까지 전파되지 않게 한다 — 그렇지 않으면 Apps Script
+Web App이 예외로 인해 비정상 응답(비-JSON/5xx)을 돌려주고,
+`lib/legacy-sync.ts`가 이를 `http_5xx`/`invalid_response`로 오인해
+**Sheet 행이 이미 정상 저장됐는데도** `cases.legacy_sync_status`가
+`'failed'`로 잘못 기록될 수 있었다. 이 예외 처리 덕분에 알림톡
+실패는 Sheet의 "오류메모"/`접수알림_보호자`·`접수알림_설계사`
+컬럼(값이 "Y"가 아니면 미발송)으로만 남고, `doPost`는 여전히
+`{ok:true, action:"inserted"}`를 반환해 `legacy_sync_status='synced'`로
+정상 기록된다.
+
+**ALIMTALK_TEST_MODE**: `Code.js`의 `isAlimtalkTestMode_()`는 Script
+Property `ALIMTALK_TEST_MODE`를 trim 후 대문자로 변환해 정확히
+`"TRUE"`와 비교한다(대소문자 무관, 앞뒤 공백 무관 — 예:
+`"true"`/`" True "` 모두 유효). 이 값이 켜져 있으면
+`sendSolapiVariablesAlimtalk_`가 실제 SOLAPI `UrlFetchApp.fetch()`
+호출 전에 즉시 테스트 결과를 반환한다 — 실배포 전 검증에 활용할 수
+있다.
+
+**전화번호 formatter 중복(알려진 사항, 이번엔 미정리)**: `Code.js`의
+`formatPhoneForResponse_()`(Google Form 경로)와 `legacy-webhook.gs`의
+`formatPhoneForSheet_()`(전자일지 경로, 10.7절)가 기능이 일부
+겹친다. `processReceptionRow_` 재사용 후에도 두 함수가 순서대로
+적용되지만(전자일지가 먼저 하이픈 형식으로 쓰고, 그 위에 Form 경로의
+포맷터가 다시 적용되어도 결과가 같음, 멱등) 결과에 문제가 없어
+이번에는 통합하지 않았다 — 향후 별도 리팩터링 대상으로만 기록한다.
+
+### 10.9 `Code.js` 의존성 — Git에 없는 운영 코드에 대한 계약 기록 (2026-08-25)
+
+**중요한 구조적 사실**: `legacy-webhook.gs`의 `doPost`(신규 INSERT
+경로)는 이제 전역 함수 `processReceptionRow_(sheet, row)`가 **같은
+Apps Script 프로젝트 안에 존재한다는 것을 전제**로 동작한다. 이
+함수는 `Code.js`(운영팀이 원래부터 관리해 온 파일)에 있고,
+**`Code.js`는 이 저장소(git)에 전혀 tracked되지 않는다** — 이 저장소는
+처음부터 `docs/google-apps-script/legacy-webhook.gs`(수신 webhook
+계약)만 문서로 갖고, Google Form/알림톡/서류 자동화 전체(`Code.js`,
+`Common.js` 등)는 의도적으로 소유 범위 밖에 둬 왔다.
+
+그 결과, 만약 누군가 `Code.js`를 예전 버전으로 되돌리거나 새로
+덮어쓰면(이 저장소가 인지할 방법이 없음), `doPost`는
+`processReceptionRow_ is not defined`로 실패하고 — 그 실패는
+`doPost` 안의 `try/catch`가 삼키므로(10.8절 "알림 실패와 Sheet 동기화
+성공 분리") **`action:"inserted"` 응답 자체는 계속 정상으로 보이지만
+접수 알림톡만 조용히 전혀 발송되지 않는** 상태가 될 수 있다 — 겉으로
+드러나지 않는 위험이라 별도로 기록해 둔다.
+
+**이번에 남기는 최소 안전장치**: `Code.js` 전체를 이 저장소에
+새로 편입하지는 않는다(범위 밖 자동화 전체를 끌어오는 것은 이번
+작업 범위를 넘어선다). 대신 이 계약이 의존하는 두 함수
+(`onFormSubmit`/`processReceptionRow_`)의 **현재 스냅샷**만 참고용으로
+남긴다 — 실제 정본(source of truth)은 여전히 운영 Apps Script
+프로젝트의 `Code.js`이며, 이 스냅샷은 그 파일이 사라지거나 되돌아갔을
+때 무엇을 복원해야 하는지 알 수 있게 하는 기록일 뿐 자동 동기화되지
+않는다.
+
+```js
+// Code.js (운영 Apps Script 프로젝트, 이 저장소 밖) — 2026-08-25 스냅샷.
+// 정본이 아님 — 실제 코드는 Apps Script 프로젝트에서 확인할 것.
+function onFormSubmit(e) {
+  return processReceptionRow_(
+    e.range.getSheet(),
+    e.range.getRow()
+  );
+}
+
+function processReceptionRow_(sheet, row) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // 등록번호 채번(없으면 createReceiptNo_)/처리상태="접수"/전화번호
+    // 정규화(addNormalizedPhoneUpdates_)/접수 알림톡(sendSolapiAlimtalk_,
+    // 보호자·설계사)/직원 알림(sendStaffNotification_) — 전체 본문은
+    // 운영 Apps Script 프로젝트 Code.js 참고.
+  } catch (err) {
+    setCellByHeader_(sheet, row, "오류메모", err.message);
+    throw err;
+  } finally {
+    lock.releaseLock();
+  }
+}
+```
+
+향후 이 함수가 이 저장소 밖에서 다시 크게 바뀌면, 이 절도 함께
+갱신해야 한다.
+
+### 10.10 실제 QR 등록 E2E 결과 (2026-08-25, ALIMTALK_TEST_MODE=FALSE)
+
+`E260825-001` 1건으로 알림톡 공통화 이후 첫 실배포 검증 완료 — Sheet
+동일 등록번호 정확히 1행, 처리상태="접수", 간병인/환자/설계사 연락처
+모두 정상 형식(010-XXXX-XXXX), 접수알림_보호자="Y", 접수알림_설계사="Y",
+오류메모 없음. 사용자가 보호자·설계사 알림톡을 실제로 수신했음을
+확인함 — Google Form 경로와 전자일지 경로가 `processReceptionRow_`를
+공유하는 구조가 실제 운영에서 정상 동작함을 검증했다.

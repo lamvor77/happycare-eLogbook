@@ -49,22 +49,22 @@ Sheet의 컬럼명이다. 문자열을 임의로 바꾸지 않는다(예: `환�
 
 | 기존 Sheet 컬럼 | 전자일지 화면 | Supabase 내부 | outbound 변환 | 최초등록 전송 여부 | 비고 |
 | --- | --- | --- | --- | --- | --- |
-| 처리상태 | (없음) | (없음) | — | **전송 안 함** | 기존 시스템의 후속 업무 처리용, 전자일지가 값을 정하지 않는다(작업 25) |
+| 처리상태 | (없음) | (없음) | — | **전송 안 함**(전자일지 payload는 이 값을 포함하지 않음) | 신규 행 생성 시에만 수신측 Apps Script(`buildRowFromHeaderMap_`)가 "접수"를 기본값으로 채운다(전자일지가 정하는 값이 아니라 Sheet 쪽 규칙) — 기존 알림톡/후속 자동화가 이 값을 전제로 동작하기 때문(2026-08-24). 재전송(update)에서는 기존 값을 그대로 유지하고 "접수"로 되돌리지 않는다 |
 | 등록번호 | (화면 미노출, 서버 생성) | `cases.registration_no` | `E{YYMMDD}-{3자리}`(작업 4) | **전송함** | 중복 방지 키 — 기존 시스템은 이 값 기준 upsert/중복거부 필요(작업 26) |
 | 타임스탬프 | (없음) | `cases.created_at` | — | **전송 안 함** | 기존 Apps Script가 자동 생성하는 구조로 추정(운영팀 확인 필요) — 중복 타임스탬프 생성을 피하기 위해 이 저장소는 보내지 않는다 |
 | 현재상태 | 현재상태(입원 예정/입원 당일/입원 중) | `cases.admission_status` | 화면 저장값 그대로("입원 예정" 등, 공백 포함 — Sheet 값과 동일하게 맞춤) | **전송함** | `ADMISSION_STATUS_OPTIONS`(`lib/registration-options.ts`) |
 | 간병인 성명 | 간병인 성명 | `caregivers.caregiver_name` | 그대로 | **전송함** | Google Form Sync 경로는 caregiver를 만들지 않아 대응 없음 |
 | 간병인 주민등록번호 | 간병인 주민등록번호(전체 13자리) | `caregivers.resident_number_ciphertext` 등(암호화 저장) | 전송 직전에만 복호화 → 평문(작업 29) | **전송함** | 업무상 필요해 평문 전송(작업 7) — API 로그/case_history/전자일지 관리자 화면에는 절대 노출하지 않는다 |
-| 간병인 연락처 | 간병인 연락처 | `caregivers.phone` | 그대로 | **전송함** | |
+| 간병인 연락처 | 간병인 연락처 | `caregivers.phone` | outbound(legacy-sync.ts)는 그대로 전송하지만, **`caregivers.phone`은 실제로는 E.164 정규화값("+8210...")이 저장되어 있다**(`register_case_v3`가 `phone`/`phone_normalized` 두 컬럼에 같은 값을 넣음 — `docs/data-model.md`의 "레거시 원본 형식" 설명은 이 경로에는 더 이상 맞지 않음, 2026-08-24 확인). Sheet에 쓸 때는 Apps Script `formatPhoneForSheet_()`가 "010-1234-5678" 형식으로 다시 변환한다 | **전송함** | Sheet 표시 형식은 `docs/legacy-sync-integration.md` 10.7절 참고 |
 | 환자 성명 | 환자 성명 | `cases.patient_name` | 그대로 | **전송함** | |
 | 환자 생년월일 | 생년월일 8자리(YYYYMMDD) | `cases.patient_birth_date` | 서버가 `normalizePatientBirthDateYyyymmdd()`로 검증 후 ISO date(`YYYY-MM-DD`)로 저장·전송 | **전송함** | 형식이 Sheet 기존 값과 다를 수 있음(운영팀 확인 필요 — 다른 형식이 필요하면 `lib/legacy-sync.ts`에서 변환 추가) |
-| 환자 연락처 | 환자 연락처 | `cases.patient_phone` | 그대로 | **전송함** | |
+| 환자 연락처 | 환자 연락처 | `cases.patient_phone` | 화면에 입력한 원본 그대로(하이픈 유무 혼재 가능) 전송 | **전송함** | Sheet에 쓸 때는 Apps Script `formatPhoneForSheet_()`가 "010-1234-5678" 형식으로 변환한다(하이픈 없는 숫자 문자열을 그대로 쓰면 Sheets가 숫자로 인식해 앞자리 0이 사라짐, 2026-08-24 확인) — 상세는 `docs/legacy-sync-integration.md` 10.7절 |
 | 환자 진단명 | 진단명 | `cases.diagnosis_name` | 그대로 | **전송함** | |
 | 병원명 | (읽기 전용, QR로 확정) | `hospitals.hospital_name`(`cases.hospital_id` 조인) | 그대로 | **전송함** | 클라이언트가 보낸 병원명은 신뢰하지 않는다 — QR 토큰으로 서버가 재조회한 `hospital_id`의 실제 이름만 보낸다(작업 12) |
 | 입원호실 | 입원호실 | `cases.room_no` | 그대로 | **전송함** | |
 | 보험사 | 보험사(Google Form 동적 목록 select, 작업 15~19) | `cases.insurance_company` | 그대로("기타" 선택 시 문자열 그대로 "기타") | **전송함** | 목록은 `GET /api/registration-options`가 매 요청 최신값을 받아옴 — 이 저장소에 하드코딩 없음 |
 | 담당설계사 | 담당설계사 | `cases.planner_name` | 그대로 | **전송함** | |
-| 설계사 연락처 | 설계사 연락처 | `cases.planner_phone` | 그대로 | **전송함** | |
+| 설계사 연락처 | 설계사 연락처 | `cases.planner_phone` | 화면에 입력한 원본 그대로(하이픈 유무 혼재 가능) 전송 | **전송함** | Sheet에 쓸 때는 Apps Script `formatPhoneForSheet_()`가 "010-1234-5678" 형식으로 변환한다 — 상세는 `docs/legacy-sync-integration.md` 10.7절 |
 | 검토메모 | (없음) | (없음) | — | **전송 안 함** | 기존 시스템 후속 업무 전용(작업 25) |
 | 간병개시 예정일 | 간병개시 예정일(`<input type="date">`, 작업 14) | `cases.care_start_date` | 그대로(`YYYY-MM-DD`) | **전송함** | |
 | 종료일 | (없음) | `cases.care_end_date` | — | **전송 안 함** | 최초등록 시점엔 아직 확정되지 않는 값 — 기존 시스템의 종료 처리 업무에서 채워지는 컬럼으로 보고 전자일지가 최초 전송에 포함하지 않는다(운영팀 확인 필요) |
@@ -88,12 +88,22 @@ Sheet의 컬럼명이다. 문자열을 임의로 바꾸지 않는다(예: `환�
 
 ## 4. 전송하지 않는 이유 요약
 
-- **후속 업무 전용 컬럼**(처리상태/검토메모/종료일/비고/알림 4종/오류메모):
+- **후속 업무 전용 컬럼**(검토메모/종료일/비고/알림 4종/오류메모):
   기존 시스템에서 운영자가 직접 채우거나 그 시스템의 내부 로직이 채우는
   값으로, 전자일지가 최초 전송 시점에 임의의 값(특히 빈 문자열)으로
   덮어쓰면 기존 업무 흐름을 깨뜨릴 위험이 있다(작업 25) — 아예 payload에
   포함하지 않아 기존 Apps Script의 기본 처리(신규 행 생성 시 빈 값 유지
   등)에 맡긴다.
+- **처리상태**(예외, 2026-08-24): 위 후속 업무 전용 컬럼과 마찬가지로
+  전자일지 payload에는 포함하지 않지만, 신규 행 생성 시에만 수신측 Apps
+  Script가 직접 "접수"를 기본값으로 채운다 — 기존 가족간병관리 시스템의
+  알림톡/후속 자동화가 이 값이 "접수"인 것을 전제로 동작하기 때문이다.
+  재전송(재시도/duplicate/update)에서는 이미 진행 중인 업무 상태를
+  "접수"로 되돌리지 않는다. 상세 동작은
+  [docs/legacy-sync-integration.md](./legacy-sync-integration.md)
+  10.6절, 실제 구현은
+  [docs/google-apps-script/legacy-webhook.gs](./google-apps-script/legacy-webhook.gs)의
+  `buildRowFromHeaderMap_` 참고.
 - **타임스탬프**: 기존 Apps Script가 자체적으로 생성하는 구조인지, 이
   저장소가 등록 시각을 보내야 하는 구조인지 확인되지 않아 보수적으로
   보내지 않는다.

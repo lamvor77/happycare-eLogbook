@@ -89,25 +89,67 @@ function doPost(e) {
     return jsonResponse_({ ok: false, error: "header_not_found" });
   }
 
-  var existingRowNumber = findRowByRegistrationNo_(sheet, headerMap, registrationNo);
-  var upsertOnDuplicate = getScriptProperty_("HAPPYCARE_UPSERT_ON_DUPLICATE") === "true";
+  // 중복검사 -> 신규 행번호 결정 -> 행 쓰기 구간을 스크립트 락으로
+  // 보호한다. appendRow() 뒤에 별도로 getLastRow()를 호출해 "방금 내가
+  // 추가한 행 번호"를 얻는 방식은, 그 사이 동시 요청이 다른 행을
+  // 추가하면 남의 행 번호를 잘못 잡을 위험이 있다 - 이 구간 전체를
+  // 잠가 그 위험을 없앤다. processReceptionRow_ 호출은 이 락을 푼
+  // 뒤에 한다 - processReceptionRow_ 자신도 동일한
+  // LockService.getScriptLock()을 내부에서 획득하므로(Code.js,
+  // 기존 onFormSubmit 본문 그대로 이동), 이 락을 쥔 채로 호출하면
+  // 같은 실행 안에서 같은 락을 다시 얻으려 시도하게 된다 - 락을
+  // 먼저 풀고 순차적으로 호출해 그 위험 자체를 구조적으로 피한다.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
 
-  if (existingRowNumber) {
-    if (!upsertOnDuplicate) {
-      // 기본 동작: 같은 등록번호면 새 행을 추가하지 않는다(중복 방지).
-      // 재전송(관리자 [다시 전송])이 몇 번 와도 안전하다.
-      return jsonResponse_({ ok: true, registration_no: registrationNo, action: "duplicate" });
+  var action;
+  var newRowNumber = null;
+
+  try {
+    var existingRowNumber = findRowByRegistrationNo_(sheet, headerMap, registrationNo);
+    var upsertOnDuplicate = getScriptProperty_("HAPPYCARE_UPSERT_ON_DUPLICATE") === "true";
+
+    if (existingRowNumber) {
+      if (!upsertOnDuplicate) {
+        // 기본 동작: 같은 등록번호면 새 행을 추가하지 않는다(중복 방지).
+        // 재전송(관리자 [다시 전송])이 몇 번 와도 안전하다. 접수
+        // 알림톡도 다시 보내지 않는다(processReceptionRow_ 호출 없음).
+        action = "duplicate";
+      } else {
+        var rowValues = buildRowFromHeaderMap_(sheet, headerMap, body, /* isUpdate */ true, existingRowNumber);
+        sheet.getRange(existingRowNumber, 1, 1, rowValues.length).setValues([rowValues]);
+        // update 경로도 접수 알림톡을 다시 보내지 않는다(처리상태 등
+        // 기존 값 보존, processReceptionRow_ 호출 없음).
+        action = "updated";
+      }
+    } else {
+      var newRow = buildRowFromHeaderMap_(sheet, headerMap, body, /* isUpdate */ false);
+      sheet.appendRow(newRow);
+      newRowNumber = sheet.getLastRow();
+      action = "inserted";
     }
-
-    var rowValues = buildRowFromHeaderMap_(sheet, headerMap, body, /* isUpdate */ true);
-    sheet.getRange(existingRowNumber, 1, 1, rowValues.length).setValues([rowValues]);
-    return jsonResponse_({ ok: true, registration_no: registrationNo, action: "updated" });
+  } finally {
+    lock.releaseLock();
   }
 
-  var newRow = buildRowFromHeaderMap_(sheet, headerMap, body, /* isUpdate */ false);
-  sheet.appendRow(newRow);
+  if (action === "inserted" && newRowNumber) {
+    // 신규 삽입일 때만 기존 접수 처리/알림톡 로직을 실행한다(Code.js
+    // processReceptionRow_ - Google Form 경로와 완전히 동일한 함수를
+    // 재사용, 새로 만들거나 복제하지 않음).
+    try {
+      processReceptionRow_(sheet, newRowNumber);
+    } catch (err) {
+      // 접수 알림톡 실패가 Sheet 동기화 자체의 실패로 오판되지 않게
+      // 한다 - Sheet 행은 이미 위에서 정상적으로 추가됐다. 실패
+      // 사실은 processReceptionRow_ 내부에서 이미 "오류메모"/알림
+      // 컬럼으로 기록한다(기존 Form 경로와 동일한 처리) - 여기서는
+      // 그 예외가 doPost 응답까지 전파되어
+      // cases.legacy_sync_status가 잘못 'failed'로 기록되지
+      // 않도록 삼키기만 한다.
+    }
+  }
 
-  return jsonResponse_({ ok: true, registration_no: registrationNo, action: "inserted" });
+  return jsonResponse_({ ok: true, registration_no: registrationNo, action: action });
 }
 
 // ============================================================================
@@ -275,15 +317,38 @@ function findRowByRegistrationNo_(sheet, headerMap, registrationNo) {
 
 /**
  * 헤더 1행에 존재하는 컬럼 중, body(JSON payload)에 같은 이름의 키가 있는
- * 값만 채운 배열을 만든다. body에 없는 헤더(처리상태, 검토메모, 종료일,
- * 비고, 접수알림_보호자, 접수알림_설계사, 등록완료알림_보호자,
+ * 값만 채운 배열을 만든다. body에 없는 헤더(검토메모, 종료일, 비고,
+ * 접수알림_보호자, 접수알림_설계사, 등록완료알림_보호자,
  * 등록완료알림_설계사, 오류메모, "5. 확인 및 동의" 등 이번 단계에서
  * 전자일지가 보내지 않는 후속관리 컬럼, 작업 H)는 빈 문자열로 남겨 기존
  * Sheet의 기본 처리(수식 등)에 맡긴다 — 값을 임의로 채우지 않는다.
  * "타임스탬프"는 body에 없을 것이 확실하므로(전자일지가 보내지 않음)
  * 신규 삽입 시에만 이 함수가 현재 시각으로 채운다.
+ *
+ * "처리상태"는 위 후속관리 컬럼과 달리 예외로 취급한다 — 신규 삽입
+ * (isUpdate=false)일 때만 "접수"를 기본값으로 채운다. 기존 가족간병관리
+ * 시스템은 이 값이 "접수"여야 이후 알림톡/후속 자동화가 정상 동작하기
+ * 때문이다(전자일지가 이 값을 payload로 보내는 것이 아니라, 신규 행을
+ * 만드는 이 함수가 직접 채운다). 재전송으로 인한 update(isUpdate=true,
+ * HAPPYCARE_UPSERT_ON_DUPLICATE="true"일 때만 발생)에서는 이미 진행 중인
+ * 업무 상태("완료"/"진행중" 등)를 "접수"로 되돌리지 않도록, existingRow의
+ * 현재 셀 값을 그대로 유지한다. (같은 이유로 검토메모/종료일/비고 등
+ * 다른 후속관리 컬럼도 update 시 이론상 빈 값으로 덮일 수 있지만, 현재
+ * 운영은 HAPPYCARE_UPSERT_ON_DUPLICATE="false"라 update 경로 자체가
+ * 쓰이지 않으므로 이번 변경 범위에 포함하지 않는다.)
+ *
+ * "간병인 연락처"/"환자 연락처"/"설계사 연락처" 3개 컬럼은 body 값을
+ * 그대로 쓰지 않고 formatPhoneForSheet_()를 거친다 - 전자일지가 보내는
+ * 전화번호 형식이 필드마다 다르고(간병인은 E.164 "+8210...", 환자/설계사는
+ * 화면에 입력한 원본 그대로 "010...", "010-...." 등 혼재), 숫자로만
+ * 이루어진 문자열을 Google Sheets의 setValues()/appendRow()에 그대로
+ * 넘기면 Sheets가 이를 숫자로 자동 인식해 맨 앞의 "+"/"0"이 사라진다
+ * (Apps Script 코드 자체에는 Number()/parseInt() 같은 변환이 없다 -
+ * 문제는 Sheets 쪽의 자동 서식 인식이다, 2026-08-24 확인). 이 저장소의
+ * Supabase 값(phone_normalized 등)은 이 함수가 전혀 건드리지 않는다 -
+ * 오직 이 Sheet 행에 쓸 표시 문자열만 변환한다.
  */
-function buildRowFromHeaderMap_(sheet, headerMap, body, isUpdate) {
+function buildRowFromHeaderMap_(sheet, headerMap, body, isUpdate, existingRow) {
   var lastColumn = sheet.getLastColumn();
   var row = new Array(lastColumn);
 
@@ -306,11 +371,80 @@ function buildRowFromHeaderMap_(sheet, headerMap, body, isUpdate) {
     }
   }
 
+  var phoneHeaders = ["간병인 연락처", "환자 연락처", "설계사 연락처"];
+  for (var p = 0; p < phoneHeaders.length; p++) {
+    var phoneCol = headerMap[phoneHeaders[p]];
+    if (phoneCol) {
+      row[phoneCol - 1] = formatPhoneForSheet_(row[phoneCol - 1]);
+    }
+  }
+
   if (!isUpdate && headerMap["타임스탬프"]) {
     row[headerMap["타임스탬프"] - 1] = new Date();
   }
 
+  if (headerMap["처리상태"]) {
+    if (!isUpdate) {
+      row[headerMap["처리상태"] - 1] = "접수";
+    } else if (existingRow) {
+      row[headerMap["처리상태"] - 1] = sheet
+        .getRange(existingRow, headerMap["처리상태"])
+        .getValue();
+    }
+  }
+
   return row;
+}
+
+/**
+ * 전화번호를 기존 가족간병관리 Sheet 표시 형식("010-1234-5678")으로
+ * 변환한다. Supabase에 저장된 실제 값(E.164 등)은 이 함수 밖에서 전혀
+ * 건드리지 않는다 - 이 함수는 Sheet 셀에 쓸 문자열만 만들어 반환한다.
+ *
+ * 처리 예:
+ *   "01012345678"   -> "010-1234-5678"
+ *   "010-1234-5678" -> "010-1234-5678" (이미 하이픈 포함, 그대로)
+ *   "+821012345678" -> "010-1234-5678"
+ *   "821012345678"  -> "010-1234-5678"
+ *   "" / null       -> ""
+ *
+ * 국내 휴대폰 번호(010/011/016/017/018/019 + 7~8자리) 패턴에 맞는
+ * 경우에만 하이픈 형식으로 다시 조립한다. 그 외 자릿수/형식(유선번호,
+ * 잘못 입력된 값 등)은 임의로 추측해 변형하지 않고 원본 문자열을 그대로
+ * 반환한다 - 다만 하이픈이 전혀 없는 숫자만의 문자열이면 여전히 Sheets가
+ * 숫자로 자동 인식할 수 있다는 한계가 있다(휴대폰 번호가 아닌 값은 이번
+ * 변경 범위 밖).
+ */
+function formatPhoneForSheet_(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  var original = String(value).trim();
+
+  if (original === "") {
+    return "";
+  }
+
+  var digits = original.replace(/[^0-9]/g, "");
+
+  // "+82"/"82" 국가번호 접두사를 국내 형식(0으로 시작)으로 되돌린다.
+  // 정확히 12자리("82" + 10자리 로컬 번호)일 때만 적용해 다른 숫자를
+  // 잘못 건드리지 않는다.
+  if (digits.length === 12 && digits.indexOf("82") === 0) {
+    digits = "0" + digits.slice(2);
+  }
+
+  if (/^01[016789]\d{7,8}$/.test(digits)) {
+    if (digits.length === 11) {
+      return digits.slice(0, 3) + "-" + digits.slice(3, 7) + "-" + digits.slice(7);
+    }
+    if (digits.length === 10) {
+      return digits.slice(0, 3) + "-" + digits.slice(3, 6) + "-" + digits.slice(6);
+    }
+  }
+
+  return original;
 }
 
 // ============================================================================
