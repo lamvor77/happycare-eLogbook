@@ -181,9 +181,14 @@ export default function CaseJoinClient() {
               <>
                 <input
                   className="w-full border p-3 rounded mb-3"
-                  placeholder="인증코드 6자리"
+                  placeholder="인증코드 4자리"
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 />
 
                 <button

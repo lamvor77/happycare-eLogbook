@@ -86,6 +86,10 @@ export default function CaseRegisterClient() {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [otpStep, setOtpStep] = useState<"phone" | "code" | "verified">("phone");
+  // 인증에 성공한 실제 전화번호(E.164) — 인증 후 전화번호가 바뀌면
+  // otpVerified가 자동으로 무효화되도록 이 값과 현재 phone을 매번
+  // 비교한다(파생 상태라 별도의 "리셋" 로직이 필요 없다).
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
 
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -169,6 +173,11 @@ export default function CaseRegisterClient() {
   }
 
   async function handleSendCode() {
+    if (!step1Valid) {
+      setMessage("등록정보를 먼저 모두 입력하고 확인해주세요.");
+      return;
+    }
+
     if (!phone.trim()) {
       setMessage("휴대폰번호를 입력해주세요.");
       return;
@@ -197,8 +206,8 @@ export default function CaseRegisterClient() {
   }
 
   async function handleVerifyCode() {
-    if (!code.trim()) {
-      setMessage("인증코드를 입력해주세요.");
+    if (code.length !== 4) {
+      setMessage("인증코드 4자리를 입력해주세요.");
       return;
     }
 
@@ -220,8 +229,23 @@ export default function CaseRegisterClient() {
       return;
     }
 
+    setVerifiedPhone(toE164(phone));
     setOtpStep("verified");
     setMessage("휴대폰 인증이 완료되었습니다. 아래 [등록하기]를 눌러주세요.");
+  }
+
+  // 붙여넣은 문자열에 "인증번호 1234입니다"처럼 문자가 섞여 있어도 숫자
+  // 4자리만 뽑아 채운다(Android/Samsung Internet 등에서 클립보드 붙여넣기가
+  // 기본 동작만으로는 잘 안 되는 경우 대비). 숫자가 없으면 기본 붙여넣기
+  // 동작을 막지 않는다.
+  function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = e.clipboardData.getData("text");
+    const digits = pasted.replace(/\D/g, "").slice(0, 4);
+
+    if (digits) {
+      e.preventDefault();
+      setCode(digits);
+    }
   }
 
   async function handleSubmit() {
@@ -246,7 +270,7 @@ export default function CaseRegisterClient() {
         return;
       }
 
-      if (otpStep !== "verified") {
+      if (!otpVerified) {
         setMessage("휴대폰 인증을 완료해주세요.");
         return;
       }
@@ -347,7 +371,13 @@ export default function CaseRegisterClient() {
     Boolean(relationship) &&
     Boolean(normalizePatientBirthDateYyyymmdd(patientBirthYyyymmdd));
 
-  const otpVerified = hasSession || otpStep === "verified";
+  // 인증된 전화번호와 현재 입력된 전화번호가 다르면(예: 인증 후 번호를
+  // 바꾼 경우) 인증 상태를 무효로 취급한다 — verifiedPhone과 매번 비교하는
+  // 파생값이라 별도의 리셋 로직 없이도 항상 최신 상태를 반영한다. 이름/
+  // 환자정보 등 phone과 무관한 값이 바뀌어도 이 조건에는 영향이 없다.
+  const otpVerified =
+    hasSession ||
+    (otpStep === "verified" && phone.trim() !== "" && verifiedPhone === toE164(phone));
 
   const caregiverFieldsValid =
     hasSession ||
@@ -367,12 +397,19 @@ export default function CaseRegisterClient() {
 
   const hasValidInsuranceCompany = effectiveInsuranceCompany.length > 0;
 
-  const canSubmit =
+  // STEP 1(등록정보 입력) 완료 조건 — OTP 인증 여부는 제외한, canSubmit의
+  // 나머지 전부. 이 값이 true일 때만 "휴대폰 인증하기"(STEP 2) 진입을
+  // 허용한다(작업 A).
+  const step1Valid =
     requiredFieldsValid &&
-    otpVerified &&
     caregiverFieldsValid &&
     allConsentsChecked &&
     hasValidInsuranceCompany;
+
+  const phoneValid = Boolean(phone.trim());
+  const canSendOtp = step1Valid && phoneValid && !saving;
+
+  const canSubmit = step1Valid && otpVerified;
 
   // 필드별 오류 메시지 — handleSubmit의 개별 검증/canSubmit의 각 조건과
   // 1:1 대응하는 한국어 문구만 만든다. 주민번호/전화번호 실제 입력값은
@@ -875,11 +912,18 @@ export default function CaseRegisterClient() {
         <section>
           <h2 className="font-bold mb-3">인증 및 등록</h2>
 
-          {!hasSession && otpStep !== "verified" && (
+          {!hasSession && !otpVerified && (
             <div className="mb-3">
               <label className="block text-sm font-bold text-gray-800 mb-1">
                 휴대폰 인증
               </label>
+
+              {!step1Valid && (
+                <p className="text-xs text-gray-600 mb-2">
+                  등록정보를 먼저 모두 입력하고 확인해주세요. 위 항목이 모두
+                  정상이면 인증코드를 받을 수 있습니다.
+                </p>
+              )}
 
               <input
                 className={`w-full border p-3 rounded mb-1 min-h-[44px] disabled:bg-gray-100 text-gray-900 ${
@@ -905,7 +949,7 @@ export default function CaseRegisterClient() {
                 <button
                   type="button"
                   onClick={handleSendCode}
-                  disabled={saving}
+                  disabled={!canSendOtp}
                   className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
                 >
                   {saving ? "전송 중..." : "인증코드 받기"}
@@ -915,16 +959,22 @@ export default function CaseRegisterClient() {
               {otpStep === "code" && (
                 <>
                   <input
-                    className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
-                    placeholder="인증코드 6자리"
+                    className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900 tracking-widest text-center text-lg"
+                    placeholder="인증코드 4자리"
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onPaste={handleOtpPaste}
                   />
 
                   <button
                     type="button"
                     onClick={handleVerifyCode}
-                    disabled={saving}
+                    disabled={saving || code.length !== 4}
                     className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
                   >
                     {saving ? "확인 중..." : "인증 확인"}
@@ -934,7 +984,7 @@ export default function CaseRegisterClient() {
             </div>
           )}
 
-          {(hasSession || otpStep === "verified") && (
+          {(hasSession || otpVerified) && (
             <p className="text-sm text-green-700 mb-3">
               휴대폰 인증이 완료되었습니다.
             </p>

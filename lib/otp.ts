@@ -6,7 +6,7 @@ import { sendSms, SolapiError } from "@/lib/solapi";
 const OTP_TTL_MS = 5 * 60 * 1000; // 5분 만료
 const RESEND_COOLDOWN_MS = 60 * 1000; // 동일 번호 60초 재발송 제한
 const DAILY_SEND_LIMIT = 10; // 동일 번호 하루 발송 횟수 제한
-const MAX_FAILED_ATTEMPTS = 5; // 검증 실패 허용 횟수
+const MAX_FAILED_ATTEMPTS = 3; // 검증 실패 허용 횟수(4자리 전환에 맞춰 5->3, 2026-08-26)
 const VERIFIED_REUSE_WINDOW_MS = 15 * 60 * 1000; // 인증 완료 후 등록/참여 폼 제출 유예시간
 
 export class OtpError extends Error {
@@ -36,8 +36,12 @@ function hashCode(phoneNormalized: string, code: string): string {
     .digest("hex");
 }
 
+// 4자리(0000~9999) — 앞자리 0도 그대로 유지되도록 항상 문자열로 다루고
+// padStart로 채운다. 원문 코드는 저장하지 않고 hashCode()의 해시만
+// caregiver_otp_codes.code_hash(text)에 저장하므로, 자릿수를 바꿔도 DB
+// 스키마 변경이 필요 없다.
 function generateCode(): string {
-  return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+  return crypto.randomInt(0, 10_000).toString().padStart(4, "0");
 }
 
 /**

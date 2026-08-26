@@ -287,7 +287,7 @@ Solapi OTP + 장기 세션 구조(`20260804090000_caregiver_session_tables.sql`,
 | code_hash | 원문 OTP 저장 금지, HMAC-SHA256(전화번호:코드) |
 | expires_at | 발송 후 5분 |
 | verified_at / consumed_at | 검증 성공 시각 / 등록·참여 폼에서 소비된 시각(15분 유예) |
-| failed_attempts | 5회 초과 시 거부 |
+| failed_attempts | 3회 초과 시 거부(4자리 전환에 맞춰 5->3, 2026-08-26) |
 | send_count / last_sent_at | 60초 재발송 쿨다운, 일일 10회 제한(`lib/otp.ts`) |
 | created_at | |
 
