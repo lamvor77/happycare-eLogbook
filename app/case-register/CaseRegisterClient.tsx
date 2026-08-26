@@ -58,7 +58,6 @@ export default function CaseRegisterClient() {
   const [patientGender, setPatientGender] = useState("");
   const [diagnosisName, setDiagnosisName] = useState("");
   const [accidentType, setAccidentType] = useState("");
-  const [accidentTypeEtc, setAccidentTypeEtc] = useState("");
 
   // 5. 보험/설계사 정보
   const [insuranceCompany, setInsuranceCompany] = useState("");
@@ -233,20 +232,6 @@ export default function CaseRegisterClient() {
     setMessage("휴대폰 인증이 완료되었습니다. 아래 [등록하기]를 눌러주세요.");
   }
 
-  // 붙여넣은 문자열에 "인증번호 1234입니다"처럼 문자가 섞여 있어도 숫자
-  // 4자리만 뽑아 채운다(Android/Samsung Internet 등에서 클립보드 붙여넣기가
-  // 기본 동작만으로는 잘 안 되는 경우 대비). 숫자가 없으면 기본 붙여넣기
-  // 동작을 막지 않는다.
-  function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
-    const pasted = e.clipboardData.getData("text");
-    const digits = pasted.replace(/\D/g, "").slice(0, 4);
-
-    if (digits) {
-      e.preventDefault();
-      setCode(digits);
-    }
-  }
-
   async function handleSubmit() {
     if (!hospitalToken && !hospitalCode) {
       setMessage("병원 정보를 찾을 수 없습니다.");
@@ -326,7 +311,13 @@ export default function CaseRegisterClient() {
         relationship,
         diagnosis_name: diagnosisName,
         accident_type: accidentType,
-        accident_type_etc: accidentTypeEtc,
+        // "기타 사고유형" 입력 UI를 최초 등록 화면에서 제거했다(운영
+        // 요청) — 사고유형 선택지 자체는 고정 3개 값(질병/상해/교통사고)
+        // 뿐이라 "기타"를 고를 수 없고, 이 값은 애초에 서버 검증에서도
+        // 선택值이라 없어도 등록에 영향이 없다(app/api/cases/register/
+        // route.ts는 없으면 null로 저장). accident_type_etc DB 컬럼/API
+        // 계약은 그대로 유지하므로 null을 보낸다.
+        accident_type_etc: null,
 
         insurance_company: insuranceCompany.trim(),
         insurance_company_other:
@@ -603,6 +594,16 @@ export default function CaseRegisterClient() {
 
               {showOtpCodeStep && (
                 <>
+                  {/*
+                    onPaste 커스텀 핸들러를 일부러 두지 않는다(2026-08-26
+                    실기기 확인) — 붙여넣은 텍스트에서 숫자만 추출하려고
+                    e.preventDefault()를 호출하던 이전 구현이 일부 모바일
+                    브라우저(Android WebView/Samsung Internet 계열)의
+                    "붙여넣기" 컨텍스트 메뉴 동작 자체를 막아버렸다. 브라우저
+                    기본 붙여넣기를 그대로 두고, 결과 문자열은 아래 onChange가
+                    숫자만 남기고 4자리로 잘라내는 것으로 충분하다(정확히
+                    4자리만 복사하는 일반적인 경우를 최우선한다).
+                  */}
                   <input
                     className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900 tracking-widest text-center text-lg"
                     placeholder="인증코드 4자리"
@@ -613,7 +614,6 @@ export default function CaseRegisterClient() {
                     pattern="[0-9]*"
                     maxLength={4}
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    onPaste={handleOtpPaste}
                   />
 
                   <button
@@ -810,7 +810,7 @@ export default function CaseRegisterClient() {
             사고유형
           </label>
           <select
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
             value={accidentType}
             onChange={(e) => setAccidentType(e.target.value)}
           >
@@ -821,15 +821,6 @@ export default function CaseRegisterClient() {
               </option>
             ))}
           </select>
-
-          <label className="block text-sm font-bold text-gray-800 mb-1">
-            기타 사고유형
-          </label>
-          <input
-            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
-            value={accidentTypeEtc}
-            onChange={(e) => setAccidentTypeEtc(e.target.value)}
-          />
         </section>
 
         {/* 5. 보험/설계사 정보 */}

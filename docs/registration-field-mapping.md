@@ -52,7 +52,7 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 | 환자 성별 | `patient_gender` | `patient_gender` | `cases.patient_gender` | 아니오 | 저장값 동일("남"/"여") | `PATIENT_GENDER_OPTIONS` |
 | 환자 연락처 | `patient_phone` | `patient_phone` | `cases.patient_phone` | 아니오 | 동일 | 그대로 저장 |
 | 진단명 | `diagnosis_name` | `diagnosis_name` | `cases.diagnosis_name` | 아니오 | 동일 | 그대로 저장 |
-| 사고유형 | `accident_type`, `accident_type_etc` | `accident_type`, `accident_type_etc` | `cases.accident_type`, `cases.accident_type_etc` | 아니오 | **QR 화면은 2026-08-22부터 고정 select(질병/상해/교통사고)로 변경**(`accident_type_etc` 자유 입력은 유지) | `ACCIDENT_TYPE_OPTIONS`(`lib/registration-options.ts`)가 이 3개 값으로 채워짐 — 업무 지시로 고정한 값이며 실제 Google Form 옵션과 다를 수 있음(확인 필요, `docs/legacy-family-care-field-map.md` 참고). Google Form 경로는 여전히 자유 입력 |
+| 사고유형 | `accident_type`, `accident_type_etc` | `accident_type`, `accident_type_etc`(2026-08-26부터 QR 화면 입력 UI 제거, 항상 `null` 전송) | `cases.accident_type`, `cases.accident_type_etc` | 아니오 | **QR 화면은 2026-08-22부터 고정 select(질병/상해/교통사고)로 변경.** 이 3개 값에는 "기타"가 없어 애초에 `accident_type_etc`를 고를 수 없었고, 2026-08-26부터는 QR 화면의 "기타 사고유형" 입력란 자체도 제거함(운영 요청) — `cases.accident_type_etc` 컬럼/API 계약은 유지 | `ACCIDENT_TYPE_OPTIONS`(`lib/registration-options.ts`)가 이 3개 값으로 채워짐 — 업무 지시로 고정한 값이며 실제 Google Form 옵션과 다를 수 있음(확인 필요, `docs/legacy-family-care-field-map.md` 참고). Google Form 경로는 여전히 자유 입력 |
 
 ## 보험
 
