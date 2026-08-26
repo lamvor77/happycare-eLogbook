@@ -41,7 +41,7 @@ Form 화면 자체는 이 저장소 밖에 있어 항목 문구까지는 확인�
 | 병원명 | 없음(구글폼은 hospital_id 개념이 없고 registration_no로만 매칭) | 읽기 전용, QR 토큰으로 서버가 재조회 | `cases.hospital_id` | 둘 다 사실상 필수(QR은 필수, Google Form은 애초에 병원 연결 없음) | Google Form 연동은 hospital_id를 아예 쓰지 않음(아래 "차이점") | QR: 서버가 `qr_token`/`hospital_code`로 재검증, 클라이언트가 보낸 hospital_id는 신뢰하지 않음 |
 | 입원호실 | `room_no` | `room_no` | `cases.room_no` | 아니오 | 동일 | 그대로 저장 |
 | 간병개시 예정일 | `care_start_date` | `care_start_date` | `cases.care_start_date` | 아니오 | **2026-08-22부터 QR 화면은 `<input type="date">`(모바일 달력)로 입력, 자유 텍스트 입력 제거** | 그대로 저장(`date`) |
-| 간병종료 예정일 | `care_end_date` | `care_end_date` | `cases.care_end_date` | 아니오 | 동일(QR 화면에 "선택"으로 유지) | 그대로 저장 |
+| 간병종료 예정일 | `care_end_date` | `care_end_date`(2026-08-26부터 QR 화면 입력 UI 제거, 항상 `null` 전송) | `cases.care_end_date` | 아니오 | **QR 화면에서 입력란을 제거함(운영 요청)** — API 필드/DB 컬럼/`register_case_v3`의 `p_care_end_date`는 그대로 유지되고, 관리자/간병종료 기능이 이 컬럼을 쓰는 방식도 변경 없음. Google Form 경로는 영향 없음 | 그대로 저장(QR은 항상 `null`) |
 
 ## 환자
 

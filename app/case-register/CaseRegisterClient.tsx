@@ -50,7 +50,6 @@ export default function CaseRegisterClient() {
   const [admissionStatus, setAdmissionStatus] = useState("");
   const [roomNo, setRoomNo] = useState("");
   const [careStartDate, setCareStartDate] = useState("");
-  const [careEndDate, setCareEndDate] = useState("");
 
   // 4. 환자 정보
   const [patientName, setPatientName] = useState("");
@@ -173,13 +172,8 @@ export default function CaseRegisterClient() {
   }
 
   async function handleSendCode() {
-    if (!step1Valid) {
-      setMessage("등록정보를 먼저 모두 입력하고 확인해주세요.");
-      return;
-    }
-
-    if (!phone.trim()) {
-      setMessage("휴대폰번호를 입력해주세요.");
+    if (!caregiverAuthReady) {
+      setMessage("간병인 성명·주민등록번호·휴대폰번호를 정확히 입력해주세요.");
       return;
     }
 
@@ -201,6 +195,11 @@ export default function CaseRegisterClient() {
       return;
     }
 
+    // 이전에 인증했던 번호를 바꿔 재인증하는 경우(needsReauth)에도 새
+    // 코드 입력을 깨끗한 상태에서 시작하도록 이전 코드/인증 상태를
+    // 함께 정리한다.
+    setCode("");
+    setVerifiedPhone(null);
     setOtpStep("code");
     setMessage("입력하신 휴대폰으로 인증코드를 보냈습니다.");
   }
@@ -308,7 +307,12 @@ export default function CaseRegisterClient() {
         admission_status: admissionStatus || undefined,
         room_no: roomNo,
         care_start_date: careStartDate || null,
-        care_end_date: careEndDate || null,
+        // "간병종료 예정일" 입력 UI를 최초 등록 화면에서 제거했다(운영
+        // 요청) — 서버 API 계약(care_end_date 필드)/DB 컬럼
+        // (cases.care_end_date)/register_case_v3의 p_care_end_date는
+        // 그대로 유지하므로 null을 보낸다. 관리자/간병종료 기능이 이
+        // 컬럼을 쓰는 방식은 건드리지 않았다.
+        care_end_date: null,
         // "비고" 입력 UI를 최초 등록 화면에서 제거했다(운영 요청) — 서버
         // API 계약(memo 필드)/DB 컬럼(cases.memo)/legacy Sheet "비고"
         // 컬럼은 그대로 유지하므로 빈 문자열을 보낸다. 기존에 이미 저장된
@@ -379,6 +383,20 @@ export default function CaseRegisterClient() {
     hasSession ||
     (otpStep === "verified" && phone.trim() !== "" && verifiedPhone === toE164(phone));
 
+  // 인증을 마친 뒤 전화번호를 다시 바꿔 재인증이 필요한 상태 — otpStep
+  // 자체는 아직 "verified"로 남아있지만(setState를 렌더 중/effect에서
+  // 하지 않기 위해 그대로 둠) verifiedPhone과 현재 phone이 달라 무효가
+  // 된 경우다. 이 값에 따라 "인증번호 받기"/코드 입력 UI를 파생값으로만
+  // 다시 보여준다.
+  const needsReauth =
+    !hasSession &&
+    otpStep === "verified" &&
+    verifiedPhone !== null &&
+    verifiedPhone !== toE164(phone);
+
+  const showOtpSendButton = !hasSession && !otpVerified && (otpStep === "phone" || needsReauth);
+  const showOtpCodeStep = !hasSession && !otpVerified && otpStep === "code" && !needsReauth;
+
   const caregiverFieldsValid =
     hasSession ||
     (Boolean(caregiverName.trim()) && isValidResidentNumberFormat(residentNumberInput));
@@ -397,19 +415,24 @@ export default function CaseRegisterClient() {
 
   const hasValidInsuranceCompany = effectiveInsuranceCompany.length > 0;
 
-  // STEP 1(등록정보 입력) 완료 조건 — OTP 인증 여부는 제외한, canSubmit의
-  // 나머지 전부. 이 값이 true일 때만 "휴대폰 인증하기"(STEP 2) 진입을
-  // 허용한다(작업 A).
-  const step1Valid =
+  // 간병인 인증(휴대폰 OTP) 발송 조건 — 등록정보 전체가 아니라 "간병인
+  // 본인 인증에 필요한 정보"만 본다(작업: 간병인 정보 섹션 내 인증).
+  // 환자/보험/동의 등 나머지 등록정보는 이 조건과 무관하다.
+  const caregiverNameValid = Boolean(caregiverName.trim());
+  const residentNumberValid = isValidResidentNumberFormat(residentNumberInput);
+  const phoneValid = Boolean(phone.trim());
+  const caregiverAuthReady =
+    caregiverNameValid && residentNumberValid && phoneValid && !saving;
+
+  // "등록하기" 버튼 활성화 조건 — 기존 전체 필수조건을 그대로 확인한다
+  // (OTP 발송 가능 여부와는 별개 — 인증 후에도 환자/보험/동의 등 나머지
+  // 정보를 자유롭게 입력/수정할 수 있어야 하므로 단계로 나누지 않는다).
+  const canSubmit =
     requiredFieldsValid &&
+    otpVerified &&
     caregiverFieldsValid &&
     allConsentsChecked &&
     hasValidInsuranceCompany;
-
-  const phoneValid = Boolean(phone.trim());
-  const canSendOtp = step1Valid && phoneValid && !saving;
-
-  const canSubmit = step1Valid && otpVerified;
 
   // 필드별 오류 메시지 — handleSubmit의 개별 검증/canSubmit의 각 조건과
   // 1:1 대응하는 한국어 문구만 만든다. 주민번호/전화번호 실제 입력값은
@@ -420,24 +443,29 @@ export default function CaseRegisterClient() {
     ? "생년월일 8자리(YYYYMMDD)를 정확히 입력해주세요. 실제 존재하는 날짜인지 확인해주세요."
     : "";
   const caregiverNameError =
-    !hasSession && !caregiverName.trim() ? "간병인 성명을 입력해주세요." : "";
+    !hasSession && !caregiverNameValid ? "간병인 성명을 입력해주세요." : "";
   const residentNumberError =
-    !hasSession && !isValidResidentNumberFormat(residentNumberInput)
+    !hasSession && !residentNumberValid
       ? "간병인 주민등록번호 13자리를 정확히 입력해주세요."
       : "";
-  const otpError = !otpVerified ? "휴대폰 인증을 완료해주세요." : "";
+  // 전화번호 자체가 비어있는 경우와, 번호는 있지만 아직 인증을 마치지
+  // 않은 경우를 구분해 중복 안내가 뜨지 않게 한다.
+  const phoneError = !hasSession && !phoneValid ? "간병인 휴대폰번호를 입력해주세요." : "";
+  const otpError =
+    !hasSession && !otpVerified && phoneValid ? "휴대폰 인증을 완료해주세요." : "";
   const insuranceCompanyError = !hasValidInsuranceCompany
     ? "보험사를 선택하거나 직접 입력해주세요."
     : "";
   const consentsError = !allConsentsChecked ? "동의 항목을 모두 확인해주세요." : "";
 
   const errorSummary = [
+    caregiverNameError,
+    residentNumberError,
+    phoneError,
+    otpError,
     patientNameError,
     relationshipError,
     patientBirthError,
-    caregiverNameError,
-    residentNumberError,
-    otpError,
     insuranceCompanyError,
     consentsError,
   ].filter(Boolean);
@@ -529,6 +557,81 @@ export default function CaseRegisterClient() {
                 가족간병인 등록 업무를 위해 전체 13자리가 필요합니다. 입력값은
                 암호화되어 저장되며, 원문은 이 화면 밖으로 남지 않습니다.
               </p>
+
+              <label className="block text-sm font-bold text-gray-800 mb-1">
+                간병인 휴대폰 번호
+              </label>
+              <input
+                className={`w-full border p-3 rounded mb-1 min-h-[44px] disabled:bg-gray-100 text-gray-900 ${
+                  touched.otp && (phoneError || otpError) ? "border-red-500" : ""
+                }`}
+                placeholder="휴대폰번호"
+                value={phone}
+                disabled={otpStep === "code"}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => markTouched("otp")}
+                aria-invalid={Boolean(touched.otp && (phoneError || otpError))}
+                aria-describedby={
+                  touched.otp && (phoneError || otpError) ? "phone-otp-error" : undefined
+                }
+              />
+              {touched.otp && (phoneError || otpError) ? (
+                <p id="phone-otp-error" className="text-xs text-red-600 mb-3">
+                  {phoneError || otpError}
+                </p>
+              ) : (
+                <div className="mb-2" />
+              )}
+
+              {!otpVerified && !caregiverAuthReady && (
+                <p className="text-xs text-gray-600 mb-2">
+                  간병인 성명·주민등록번호·휴대폰번호를 정확히 입력하면
+                  인증번호를 받을 수 있습니다.
+                </p>
+              )}
+
+              {showOtpSendButton && (
+                <button
+                  type="button"
+                  onClick={handleSendCode}
+                  disabled={!caregiverAuthReady}
+                  className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
+                >
+                  {saving ? "전송 중..." : "인증번호 받기"}
+                </button>
+              )}
+
+              {showOtpCodeStep && (
+                <>
+                  <input
+                    className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900 tracking-widest text-center text-lg"
+                    placeholder="인증코드 4자리"
+                    value={code}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onPaste={handleOtpPaste}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyCode}
+                    disabled={saving || code.length !== 4}
+                    className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
+                  >
+                    {saving ? "확인 중..." : "인증 확인"}
+                  </button>
+                </>
+              )}
+
+              {otpVerified && (
+                <p className="text-sm text-green-700 mb-3">
+                  휴대폰 인증이 완료되었습니다.
+                </p>
+              )}
             </>
           )}
 
@@ -603,20 +706,10 @@ export default function CaseRegisterClient() {
             간병개시 예정일
           </label>
           <input
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
             type="date"
             value={careStartDate}
             onChange={(e) => setCareStartDate(e.target.value)}
-          />
-
-          <label className="block text-sm font-bold text-gray-800 mb-1">
-            간병종료 예정일(선택)
-          </label>
-          <input
-            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
-            type="date"
-            value={careEndDate}
-            onChange={(e) => setCareEndDate(e.target.value)}
           />
         </section>
 
@@ -908,87 +1001,9 @@ export default function CaseRegisterClient() {
           )}
         </section>
 
-        {/* 7. 인증 및 등록 */}
+        {/* 7. 등록 */}
         <section>
-          <h2 className="font-bold mb-3">인증 및 등록</h2>
-
-          {!hasSession && !otpVerified && (
-            <div className="mb-3">
-              <label className="block text-sm font-bold text-gray-800 mb-1">
-                휴대폰 인증
-              </label>
-
-              {!step1Valid && (
-                <p className="text-xs text-gray-600 mb-2">
-                  등록정보를 먼저 모두 입력하고 확인해주세요. 위 항목이 모두
-                  정상이면 인증코드를 받을 수 있습니다.
-                </p>
-              )}
-
-              <input
-                className={`w-full border p-3 rounded mb-1 min-h-[44px] disabled:bg-gray-100 text-gray-900 ${
-                  touched.otp && otpError ? "border-red-500" : ""
-                }`}
-                placeholder="휴대폰번호"
-                value={phone}
-                disabled={otpStep === "code"}
-                onChange={(e) => setPhone(e.target.value)}
-                onBlur={() => markTouched("otp")}
-                aria-invalid={Boolean(touched.otp && otpError)}
-                aria-describedby={touched.otp && otpError ? "otp-error" : undefined}
-              />
-              {touched.otp && otpError ? (
-                <p id="otp-error" className="text-xs text-red-600 mb-3">
-                  {otpError}
-                </p>
-              ) : (
-                <div className="mb-2" />
-              )}
-
-              {otpStep === "phone" && (
-                <button
-                  type="button"
-                  onClick={handleSendCode}
-                  disabled={!canSendOtp}
-                  className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
-                >
-                  {saving ? "전송 중..." : "인증코드 받기"}
-                </button>
-              )}
-
-              {otpStep === "code" && (
-                <>
-                  <input
-                    className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900 tracking-widest text-center text-lg"
-                    placeholder="인증코드 4자리"
-                    value={code}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]*"
-                    maxLength={4}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    onPaste={handleOtpPaste}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={handleVerifyCode}
-                    disabled={saving || code.length !== 4}
-                    className="w-full bg-blue-600 text-white p-3 rounded min-h-[44px] disabled:opacity-50"
-                  >
-                    {saving ? "확인 중..." : "인증 확인"}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {(hasSession || otpVerified) && (
-            <p className="text-sm text-green-700 mb-3">
-              휴대폰 인증이 완료되었습니다.
-            </p>
-          )}
+          <h2 className="font-bold mb-3">등록</h2>
 
           {hasInteracted && !canSubmit && errorSummary.length > 0 && (
             <div
