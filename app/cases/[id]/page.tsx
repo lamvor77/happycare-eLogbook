@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
+import {
+  canShowCurrentCaregiverChange,
+  getCurrentCaregiverChangeCandidates,
+} from "@/lib/case-caregivers";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
@@ -104,6 +108,18 @@ export default async function CaseDetailPage({
     : caseCaregiver.cases?.status;
   const canManage = caseCaregiver.is_current_caregiver && memberCaseStatus === "입원중";
 
+  // 변경 후보와 노출 여부는 lib/case-caregivers.ts의 공통 규칙으로 계산한다
+  // — 간병일지 작성 화면과 판단이 갈리지 않게 하기 위해서다. 후보 목록은
+  // 서버에서 이미 걸러 넘기므로, 화면이 비활성/현재 간병인을 감추는 것이
+  // 아니라 애초에 받지 않는다.
+  const changeCandidates = getCurrentCaregiverChangeCandidates(
+    caseData.case_caregivers
+  );
+  const showCurrentCaregiverChange = canShowCurrentCaregiverChange(
+    caseData.case_caregivers,
+    canManage
+  );
+
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto space-y-4">
@@ -188,11 +204,12 @@ export default async function CaseDetailPage({
           </div>
         </div>
 
-        <ChangeCurrentCaregiver
-          caseId={caseData.case_id}
-          caregivers={caseData.case_caregivers || []}
-          canChange={canManage}
-        />
+        {showCurrentCaregiverChange && (
+          <ChangeCurrentCaregiver
+            caseId={caseData.case_id}
+            caregivers={changeCandidates}
+          />
+        )}
 
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-3">최근 간병일지</h2>

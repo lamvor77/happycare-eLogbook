@@ -3,14 +3,24 @@
 import { useState } from "react";
 import type { CaseCaregiver } from "@/types/domain";
 
+/**
+ * 현재 간병인 변경 영역.
+ *
+ * 이 컴포넌트는 "보여줘도 되는 상황인지"를 스스로 판단하지 않는다 —
+ * 호출부(app/cases/[id]/page.tsx)가 lib/case-caregivers.ts의 공통 규칙으로
+ * 변경 권한과 활성 간병인 수(2명 이상)를 확인한 뒤에만 렌더한다. 그래서
+ * 여기서는 권한 없음 안내를 따로 그리지 않는다(권한이 없으면 영역 자체가
+ * 나타나지 않는다).
+ *
+ * caregivers도 이미 걸러진 "변경 가능한 후보"만 넘어온다 — 비활성
+ * 간병인과 현재 간병인 본인은 포함되지 않는다.
+ */
 export default function ChangeCurrentCaregiver({
   caseId,
   caregivers,
-  canChange,
 }: {
   caseId: string;
   caregivers: CaseCaregiver[];
-  canChange: boolean;
 }) {
   const [selectedId, setSelectedId] = useState("");
   const [message, setMessage] = useState("");
@@ -45,25 +55,6 @@ export default function ChangeCurrentCaregiver({
     setTimeout(() => {
       window.location.reload();
     }, 1000);
-  }
-
-  if (!canChange) {
-    return (
-      <div className="bg-white rounded-lg shadow p-5">
-        <h2 className="font-bold mb-3">현재 간병인 변경</h2>
-
-        <p className="text-sm text-gray-600">
-          현재 간병인으로 로그인한 경우에만 변경할 수 있습니다.
-        </p>
-
-        <a
-          href="/caregiver-login"
-          className="inline-block mt-3 bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          간병인 로그인
-        </a>
-      </div>
-    );
   }
 
   return (

@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
 import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import {
+  canShowCurrentCaregiverChange,
+  getCurrentCaregiverChangeCandidates,
+} from "@/lib/case-caregivers";
+import ChangeCurrentCaregiver from "@/app/cases/[id]/ChangeCurrentCaregiver";
 import CareLogClient from "./CareLogClient";
 import type { CaseCaregiver } from "@/types/domain";
 
@@ -68,6 +73,21 @@ export default async function CaseCareLogPage({
     return <main className="p-8">현재 간병인이 지정되어 있지 않습니다.</main>;
   }
 
+  // 현재 간병인 변경 노출 조건은 사례 상세(app/cases/[id]/page.tsx)와
+  // 같은 lib/case-caregivers.ts 규칙으로 판단한다 — 두 화면이 서로 다른
+  // 기준을 갖지 않게 하기 위해서다. 컴포넌트도 사례 상세의 것을 그대로
+  // 재사용한다(같은 기능을 복제하지 않는다).
+  //
+  // canManage에 true를 넘기는 근거: 위 requireCurrentCaregiverSession(id)를
+  // 통과했다는 것은 (1) 로그인 상태이고 (2) 이 사례의 현재 간병인 본인이며
+  // (3) 사례가 아직 진행 중(간병종료면 400으로 막힌다)이라는 뜻이다 —
+  // 사례 상세가 canManage로 확인하는 조건과 같은 내용을 이 화면은 이미
+  // 진입 시점에 강제하고 있다.
+  const showCurrentCaregiverChange = canShowCurrentCaregiverChange(
+    caseData.case_caregivers,
+    true
+  );
+
   // 위에서 requireCurrentCaregiverSession()을 통과했으므로 로그인 상태와
   // 현재 간병인 여부는 이미 서버에서 확정된 사실이다.
   const caregiverStatus = {
@@ -83,6 +103,16 @@ export default async function CaseCareLogPage({
       currentCaregiverName={currentCaregiver.caregivers?.caregiver_name ?? null}
       currentCaregiverRelationship={currentCaregiver.relationship ?? null}
       caregiverStatus={caregiverStatus}
+      currentCaregiverChange={
+        showCurrentCaregiverChange ? (
+          <ChangeCurrentCaregiver
+            caseId={id}
+            caregivers={getCurrentCaregiverChangeCandidates(
+              caseData.case_caregivers
+            )}
+          />
+        ) : null
+      }
     />
   );
 }

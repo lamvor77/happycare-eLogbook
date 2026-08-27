@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 type LocationStatus = "checking" | "checked" | "unavailable";
 
@@ -16,12 +16,19 @@ export default function CareLogClient({
   currentCaregiverName,
   currentCaregiverRelationship,
   caregiverStatus,
+  currentCaregiverChange,
 }: {
   caseId: string;
   patientName: string;
   currentCaregiverName: string | null;
   currentCaregiverRelationship: string | null;
   caregiverStatus: CaregiverStatus;
+  /**
+   * "현재 간병인 변경" 영역. 보여줄 조건이 아닐 때는 서버(page.tsx)가
+   * 아무것도 넘기지 않으므로 이 자리에 빈 카드나 제목이 남지 않는다.
+   * 이 컴포넌트는 노출 여부를 스스로 판단하지 않는다.
+   */
+  currentCaregiverChange?: ReactNode;
 }) {
   const [mealAssist, setMealAssist] = useState(false);
   const [moveAssist, setMoveAssist] = useState(false);
@@ -197,6 +204,10 @@ export default function CareLogClient({
             </div>
           )}
         </div>
+
+        {/* 작성을 시작하기 전에 현재 간병인을 확인하고 필요하면 바로 바꿀 수
+            있도록, 환자/현재 간병인을 보여주는 위 카드 바로 다음에 둔다. */}
+        {currentCaregiverChange}
 
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-4">간병활동</h2>
