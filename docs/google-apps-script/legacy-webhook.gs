@@ -132,18 +132,7 @@ function doPost(e) {
     lock.releaseLock();
   }
 
-  // 가족간병인 추가 참여(family_join)는 새 등록번호로 새 행을 만들지만,
-  // 같은 환자에 대한 보호자/설계사/직원 접수 알림을 다시 보내지는 않는다
-  // (운영 정책, 2026-08-27 확정). 최초 등록(initial)과 Google Form 경로는
-  // 지금까지와 100% 동일하게 processReceptionRow_를 그대로 탄다.
-  //
-  // registration_type은 Sheet 헤더에 없는 body 전용 제어값이라
-  // buildRowFromHeaderMap_이 무시한다 - 시트에 새 컬럼이 생기지 않는다.
-  // 값이 없는 기존 요청(전자일지 최초 등록)은 아래 조건이 false가 되어
-  // 종전과 똑같이 동작한다.
-  var suppressReceptionNotice = body.registration_type === "family_join";
-
-  if (action === "inserted" && newRowNumber && !suppressReceptionNotice) {
+  if (action === "inserted" && newRowNumber) {
     // 신규 삽입일 때만 기존 접수 처리/알림톡 로직을 실행한다(Code.js
     // processReceptionRow_ - Google Form 경로와 완전히 동일한 함수를
     // 재사용, 새로 만들거나 복제하지 않음).

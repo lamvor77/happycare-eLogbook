@@ -33,14 +33,16 @@ import {
  *     간병인"에게서 가져온다 — 최초 간병인의 값을 절대 쓰지 않는다.
  *   - payload에 registration_type: 'family_join'을 넣는다(아래 참고).
  *
- * 알림 억제(운영 정책, 2026-08-27 확정):
- *   추가 간병인이 참여할 때마다 같은 환자에 대해 보호자/설계사/직원
- *   접수 알림이 반복 발송되면 안 된다. Apps Script는 새 행이 생기면
- *   processReceptionRow_를 실행해 그 알림들을 보내므로, payload에
- *   registration_type을 실어 보내 Apps Script가 family_join일 때만
- *   그 호출을 건너뛰도록 한다. 이 key는 Sheet 헤더에 없는 이름이라
- *   buildRowFromHeaderMap_이 무시하므로 시트에 새 컬럼이 생기지 않는다
- *   (docs/google-apps-script/legacy-webhook.gs 참고).
+ * 접수 알림(운영 정책, 2026-08-28 변경):
+ *   family_join 신규 행도 최초 등록과 똑같이 processReceptionRow_를 타서
+ *   보호자/설계사/직원 접수 알림이 발송된다. 담당직원이 신규 가족간병인
+ *   등록 내용을 확인하고 처리상태를 "등록완료"로 바꿔야 하기 때문이다.
+ *   이전에 두었던 family_join 알림 억제 분기는 폐기했다 — Apps Script는
+ *   registration_type을 알림 분기에 쓰지 않는다.
+ *
+ *   registration_type은 등록 건 종류를 수신 측에 알려주는 식별값으로만
+ *   남긴다. Sheet 헤더에 없는 이름이라 buildRowFromHeaderMap_이 무시하므로
+ *   시트에 새 컬럼이 생기지 않는다.
  *
  * 개인정보 처리 원칙은 lib/legacy-sync.ts와 동일하다 — 주민등록번호는 이
  * 함수 안에서만 복호화하고, 원문/암호문/요청 body/응답 body를 절대
@@ -49,7 +51,10 @@ import {
 
 interface LegacyRegistrationPayload {
   secret: string;
-  /** Sheet 헤더에 없는 내부 제어값 — Apps Script의 알림 분기에만 쓰인다. */
+  /**
+   * 등록 건 종류. Sheet 헤더에 없는 이름이라 시트에 기록되지 않는다.
+   * 알림 발송 여부를 가르는 데는 쓰지 않는다(2026-08-28 정책 변경).
+   */
   registration_type: "family_join";
   등록번호: string;
   현재상태: string | null;
