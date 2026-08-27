@@ -85,38 +85,7 @@ function mapRpcError(message: string): { status: number; error: string } {
   return { status: 500, error: "등록 처리에 실패했습니다." };
 }
 
-/**
- * [임시 계측 — 제거 예정] 등록 응답 전 어느 구간에서 시간이 쓰이는지
- * 실측하기 위한 진단용 도구. 단계 이름과 소요 ms만 다루고, 요청 본문/
- * 개인정보/식별자는 어떤 형태로도 담지 않는다.
- *
- * 성능 개선 판단이 끝나면 이 함수와 호출부(mark(...)/console.info의
- * "[register-perf]" 두 곳)를 통째로 제거한다 — 이 주석 블록이 제거 범위의
- * 표식이다.
- */
-function createPerfTracker() {
-  const start = Date.now();
-  let last = start;
-  const steps: Record<string, number> = {};
-
-  return {
-    /** 직전 mark 이후 경과 시간을 해당 단계 이름으로 기록한다. */
-    mark(step: string) {
-      const now = Date.now();
-      steps[step] = now - last;
-      last = now;
-    },
-    /** 지금까지의 단계별 소요 시간과 전체 소요 시간을 함께 돌려준다. */
-    summary() {
-      return { ...steps, total_ms: Date.now() - start };
-    },
-  };
-}
-
 export async function POST(request: Request) {
-  // [임시 계측 — 제거 예정] createPerfTracker 주석 참고.
-  const perf = createPerfTracker();
-
   if (!isSameOriginRequest(request)) {
     return sameOriginErrorResponse();
   }
@@ -195,11 +164,7 @@ export async function POST(request: Request) {
   // 이미 유효한 세션이 있으면(재방문 등록) 그 caregiver 신원을 그대로
   // 쓰고, 클라이언트가 보낸 이름/전화번호/주민등록번호는 신뢰하지 않는다.
   // 세션이 없으면 방금 소비되지 않은 OTP 인증이 있어야만 진행할 수 있다.
-  perf.mark("validation");
-
   const existingSession = await getCaregiverSession();
-
-  perf.mark("caregiver_session");
 
   let caregiverName: string;
   let caregiverPhoneNormalized: string;
@@ -226,8 +191,6 @@ export async function POST(request: Request) {
     caregiverPhoneNormalized = toE164(body.caregiver_phone);
 
     const otpConsumed = await consumeVerifiedOtp(caregiverPhoneNormalized);
-
-    perf.mark("otp_consume");
 
     if (!otpConsumed) {
       return NextResponse.json(
@@ -260,8 +223,6 @@ export async function POST(request: Request) {
     residentNumberAuthTag = encrypted.authTag;
     residentNumberKeyVersion = encrypted.keyVersion;
     // 이 지점 이후로는 digits13(원문)을 더 이상 참조하지 않는다.
-
-    perf.mark("rrn_encrypt");
   }
 
   let hospitalQuery = supabase.from("hospitals").select("hospital_id, status");
@@ -271,8 +232,6 @@ export async function POST(request: Request) {
     : hospitalQuery.eq("hospital_code", body.hospital_code as string);
 
   const { data: hospital } = await hospitalQuery.maybeSingle();
-
-  perf.mark("hospital_lookup");
 
   if (!hospital || hospital.status !== "active") {
     return NextResponse.json({ error: "병원 정보를 찾을 수 없습니다." }, { status: 400 });
@@ -318,8 +277,6 @@ export async function POST(request: Request) {
     p_insurance_company_other: insuranceCompanyOther,
   });
 
-  perf.mark("register_case_v3");
-
   if (error) {
     // 에러 메시지만 남기고, 요청 body나 주민등록번호 관련 값은 로그에
     // 남기지 않는다.
@@ -336,8 +293,6 @@ export async function POST(request: Request) {
 
   if (!hasExistingSession && result.out_caregiver_id) {
     await issueCaregiverSession(result.out_caregiver_id);
-
-    perf.mark("issue_session");
   }
 
   if (!result.out_is_existing) {
@@ -354,8 +309,6 @@ export async function POST(request: Request) {
     if (historyError) {
       console.error("case_history insert 실패:", historyError);
     }
-
-    perf.mark("case_history");
 
     // 신규 사례일 때만 기존 가족간병관리 시스템으로 등록정보를 자동
     // 전송한다(작업 D — "전자일지 최초등록 성공 시"). 기존 사례 재사용
@@ -375,10 +328,6 @@ export async function POST(request: Request) {
     // 위 설명 그대로 유지되고, 상태 전이(pending → synced/failed)도
     // lib/legacy-sync.ts가 하던 대로 그대로 수행한다.
     after(async () => {
-      // [임시 계측 — 제거 예정] 이 구간은 응답 이후에 실행되므로 위
-      // [register-perf](응답 전 구간)와 섞이지 않도록 별도 태그로 남긴다.
-      const afterStart = Date.now();
-
       try {
         await syncCaseToLegacySystem(result.out_case_id);
       } catch (syncError) {
@@ -386,10 +335,6 @@ export async function POST(request: Request) {
           "legacy sync 처리 중 예외:",
           syncError instanceof Error ? syncError.message : "알 수 없는 오류"
         );
-      } finally {
-        console.info("[register-perf-after]", {
-          duration_ms: Date.now() - afterStart,
-        });
       }
     });
   }
@@ -406,19 +351,10 @@ export async function POST(request: Request) {
     .eq("case_id", result.out_case_id)
     .eq("status", "활성");
 
-  perf.mark("caregiver_count");
-
   const { count: consentRecordCount } = await admin
     .from("case_consents")
     .select("*", { count: "exact", head: true })
     .eq("case_id", result.out_case_id);
-
-  perf.mark("consent_count");
-
-  // [임시 계측 — 제거 예정] 단계 이름과 소요 ms만 남긴다. 환자/간병인
-  // 정보, case_id, registration_no 등 식별자는 계측에 불필요하므로 담지
-  // 않는다.
-  console.info("[register-perf]", perf.summary());
 
   // 응답에는 주민등록번호 관련 값(원문/마스킹/암호문 모두)을 절대 포함하지
   // 않는다.

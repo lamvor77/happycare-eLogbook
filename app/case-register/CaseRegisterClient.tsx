@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toE164 } from "@/lib/phone";
 import {
   RELATIONSHIP_OPTIONS,
@@ -34,6 +34,7 @@ function buildInitialConsents(): Record<ConsentKey, boolean> {
 
 export default function CaseRegisterClient() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const hospitalCode = searchParams.get("h");
   const hospitalToken = searchParams.get("q");
 
@@ -91,6 +92,12 @@ export default function CaseRegisterClient() {
 
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 등록 성공 후 사례 화면으로 이동하는 동안의 상태. 이동은 클라이언트
+  // 라우팅이라 즉시 끝나지 않으므로(목적지가 서버 렌더 화면이다), 그
+  // 사이에 "등록하기"를 다시 누를 수 있으면 같은 등록이 두 번 전송될 수
+  // 있다 — 이동이 끝나 이 컴포넌트가 사라질 때까지 버튼을 잠근다.
+  const [navigating, setNavigating] = useState(false);
 
   // 입력 오류 UX — 필드를 건드리기 전에는 오류를 보여주지 않는다.
   // blur(또는 체크박스 변경) 시점에 해당 필드만 "touched"로 표시한다.
@@ -337,14 +344,18 @@ export default function CaseRegisterClient() {
     // 성공/실패와 무관하게, 서버로 보낸 뒤에는 화면에 남겨둘 이유가 없다.
     resetResidentNumber();
 
-    setSaving(false);
-
     const body = await response.json().catch(() => null);
 
     if (!response.ok) {
+      setSaving(false);
       setMessage(body?.error || "등록에 실패했습니다.");
       return;
     }
+
+    // 성공 시에는 saving을 내리지 않고 navigating으로 이어받는다 — 이동이
+    // 끝날 때까지 버튼이 계속 잠겨 있어야 중복 등록을 막을 수 있다.
+    setSaving(false);
+    setNavigating(true);
 
     setMessage(
       body.is_existing
@@ -352,9 +363,18 @@ export default function CaseRegisterClient() {
         : `등록 완료. 가족코드: ${body.family_code}`
     );
 
-    setTimeout(() => {
-      window.location.href = `/cases/${body.case_id}`;
-    }, 1200);
+    // 예전에는 가족코드를 읽을 시간을 주려고 1.2초를 기다린 뒤
+    // window.location.href로 전체 페이지를 다시 불러왔다. 이동한 사례
+    // 화면(app/cases/[id]/page.tsx)이 이미 "가족코드: ..."를 계속 보여주고
+    // 있어 그 대기가 필요 없고, 전체 리로드는 번들을 다시 내려받게 만든다.
+    // 그래서 고정 대기 없이 클라이언트 라우팅으로 바로 이동한다.
+    //
+    // 새 간병인의 세션 쿠키는 이 fetch 응답의 Set-Cookie로 이미 브라우저에
+    // 저장된 상태라(응답 헤더는 body를 읽기 전에 처리된다), 같은 출처로
+    // 나가는 이 이동 요청에 그대로 실려 간다 — 목적지의
+    // requireCaseMemberSession도 정상 인식한다. 전체 리로드가 쿠키 반영을
+    // 위해 필요했던 것이 아니므로 router.refresh()도 넣지 않는다.
+    router.push(`/cases/${body.case_id}`);
   }
 
   // "등록하기" 버튼 활성화 조건 — 판정 기준을 이름 붙은 변수로 나눠
@@ -1015,10 +1035,10 @@ export default function CaseRegisterClient() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving || !canSubmit}
+            disabled={saving || navigating || !canSubmit}
             className="w-full bg-blue-600 text-white p-4 rounded-lg font-bold min-h-[44px] disabled:opacity-50"
           >
-            {saving ? "등록 중..." : "등록하기"}
+            {navigating ? "이동 중..." : saving ? "등록 중..." : "등록하기"}
           </button>
         </section>
 
