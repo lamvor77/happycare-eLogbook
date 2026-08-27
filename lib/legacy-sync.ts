@@ -77,13 +77,13 @@ export interface LegacySyncResult {
  * 30초는 관리자 stale-pending 기준(5분, lib/legacy-sync-pending.ts)보다
  * 충분히 짧아, "정상 처리 중인 pending"이 그 기준을 넘길 일이 없다.
  */
-const REQUEST_TIMEOUT_MS = 30_000;
+export const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * 환자 성별 저장값("남"/"여")을 Sheet가 쓰는 표시값("남자"/"여자")으로
  * 변환한다 — DB 저장값 자체는 바꾸지 않는다(작업 10, 기존 데이터 유지).
  */
-function toSheetGender(value: string | null): string | null {
+export function toSheetGender(value: string | null): string | null {
   if (value === "남") return "남자";
   if (value === "여") return "여자";
   return value;
@@ -94,9 +94,10 @@ function toSheetGender(value: string | null): string | null {
  * 등록된 행에서 확인한 Sheet 저장 문자열 그대로다(2026-08-25, 사용자
  * 확인). 임의로 만든 값이 아니다 — 쉼표/쉼표 뒤 공백/마침표/문장 순서
  * 전부 실제 값과 동일하게 유지한다. 전자일지 쪽에서 새로 만들지 않고
- * 이 상수 하나로만 참조한다(외부에서 쓸 일이 없어 export하지 않음).
+ * 이 상수 하나로만 참조한다 — 등록 건 기준 전송(lib/
+ * legacy-sync-registration.ts)도 같은 값을 써야 하므로 export한다.
  */
-const LEGACY_CONSENT_RESPONSE =
+export const LEGACY_CONSENT_RESPONSE =
   "간호통합병동은 가족간병 신청이 불가함을 확인했습니다., 등록한 간병인이 직접 간병해야 함을 확인했습니다., 허위 신청 시 본사가 책임지지 않음을 확인했습니다., 가족간병인 등록은 보험금 지급을 보장하지 않음을 확인했습니다., 본인은 입력한 내용이 사실과 다를 경우 보험금 지급이 제한될 수 있음을 확인합니다., 개인정보 수집 및 이용에 동의합니다.";
 
 /**
