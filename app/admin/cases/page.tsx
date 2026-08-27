@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import type { CaseRecord } from "@/types/domain";
+import { canRetryLegacySync } from "@/lib/legacy-sync-pending";
 import LegacySyncRetryButton from "./LegacySyncRetryButton";
 
 function getSourceLabel(sourceType?: string | null) {
@@ -127,6 +128,16 @@ export default async function AdminCasesPage({
           const needsCaregiverLink =
             item.source_type === "google_form" && activeCaregiverCount === 0;
           const legacySyncLabel = getLegacySyncLabel(item.legacy_sync_status);
+          // 'failed'는 기존과 동일하게 항상 재전송 버튼을 노출한다. 'pending'은
+          // 최초 등록의 after() 전송이 아직 진행 중일 수 있으므로, 정상
+          // 처리라면 이미 끝났을 시간이 지난 건에만 노출한다(중복 전송 방지 —
+          // 기준과 근거는 lib/legacy-sync-pending.ts). API도 같은 조건을 다시
+          // 검사한다(app/api/admin/cases/[id]/legacy-sync/route.ts) — 이 화면
+          // 조건은 버튼 노출용일 뿐이다.
+          const canRetryLegacy = canRetryLegacySync(
+            item.legacy_sync_status,
+            item.created_at
+          );
 
           return (
           <div key={item.case_id} className="bg-white border rounded-lg p-5 shadow-sm">
@@ -172,9 +183,7 @@ export default async function AdminCasesPage({
                   {legacySyncLabel.text}
                 </span>
 
-                {item.legacy_sync_status === "failed" && (
-                  <LegacySyncRetryButton caseId={item.case_id} />
-                )}
+                {canRetryLegacy && <LegacySyncRetryButton caseId={item.case_id} />}
               </div>
             )}
 

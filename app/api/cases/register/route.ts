@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getCaregiverSession } from "@/lib/caregiver-auth";
@@ -317,14 +317,26 @@ export async function POST(request: Request) {
     // syncCaseToLegacySystem 내부에서 실패해도 cases.legacy_sync_status만
     // 'failed'로 남기고 정상 반환하지만, 예상치 못한 예외까지 등록 응답을
     // 막지 않도록 이 호출 자체도 try/catch로 감싼다.
-    try {
-      await syncCaseToLegacySystem(result.out_case_id);
-    } catch (syncError) {
-      console.error(
-        "legacy sync 처리 중 예외:",
-        syncError instanceof Error ? syncError.message : "알 수 없는 오류"
-      );
-    }
+    //
+    // 이 전송은 응답을 막지 않는다 — Apps Script(Sheet 저장)와 그 뒤의
+    // 알림톡 발송까지 왕복하면 수 초가 걸리는데, DB 등록이 이미 끝난
+    // 사용자를 그동안 기다리게 할 이유가 없다. next/server의 after()는
+    // 응답을 보낸 뒤 콜백을 실행하되, Vercel에서는 waitUntil()에 연결되어
+    // 콜백이 끝날 때까지 함수 인스턴스의 수명을 연장한다 — await만 지운
+    // fire-and-forget과 달리, 응답 직후 인스턴스가 회수되면서 전송이
+    // 중간에 끊기는 일이 없다. 호출 조건(신규 사례 1회)과 예외 격리는
+    // 위 설명 그대로 유지되고, 상태 전이(pending → synced/failed)도
+    // lib/legacy-sync.ts가 하던 대로 그대로 수행한다.
+    after(async () => {
+      try {
+        await syncCaseToLegacySystem(result.out_case_id);
+      } catch (syncError) {
+        console.error(
+          "legacy sync 처리 중 예외:",
+          syncError instanceof Error ? syncError.message : "알 수 없는 오류"
+        );
+      }
+    });
   }
 
   // register_case_v3는 caregiver/case/case_caregiver/case_consent를
