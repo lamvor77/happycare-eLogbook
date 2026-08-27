@@ -66,8 +66,12 @@ Content-Type: application/json
   각 필드의 출처, 전송 여부는
   [docs/legacy-family-care-field-map.md](./legacy-family-care-field-map.md)
   참고.
-- 타임아웃: 10초(`REQUEST_TIMEOUT_MS`, `lib/legacy-sync.ts`). 이 시간
+- 타임아웃: 30초(`REQUEST_TIMEOUT_MS`, `lib/legacy-sync.ts`). 이 시간
   안에 응답하지 못하면 실패로 처리하고 이후 관리자가 재시도한다.
+  2026-08-27에 10초에서 30초로 늘렸다 — Sheet 저장과 알림톡이 모두 정상
+  완료된 건을 10초 초과라는 이유만으로 실패로 기록하는 false negative가
+  실제로 발생했다. 이 대기는 등록 응답 이후 after() 콜백에서 이뤄지므로
+  사용자 응답시간에는 영향을 주지 않는다.
 
 ### 응답
 
@@ -117,7 +121,7 @@ Content-Type: application/json
   - `not_configured` — 웹훅 URL/시크릿 환경변수 미설정
   - `case_not_found` / `no_current_caregiver` — 서버 재조회 실패
   - `decrypt_failed` — 간병인 주민등록번호 복호화 실패(키 버전 문제 등)
-  - `timeout` — 10초 내 응답 없음
+  - `timeout` — 30초 내 응답 없음
   - `network_error` — 연결 실패
   - `http_4xx` / `http_5xx` — 수신 측이 실패 상태코드 반환
   - `invalid_response` — HTTP 상태는 2xx였지만 응답 body가 JSON이

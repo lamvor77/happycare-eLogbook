@@ -61,7 +61,23 @@ export interface LegacySyncResult {
   errorCode?: LegacySyncErrorCode;
 }
 
-const REQUEST_TIMEOUT_MS = 10_000;
+/**
+ * Apps Script 응답 대기 한도.
+ *
+ * 10초에서 30초로 올렸다(2026-08-27). 실제 운영 등록 1건(E260827-002)에서
+ * Google Sheet 행 생성과 알림톡 발송이 모두 정상 완료됐는데도 우리 쪽만
+ * 10초에 기다리기를 포기해 legacy_sync_status를 'failed'(timeout)로
+ * 기록하는 false negative가 확인됐다 — Apps Script 응답이 이전 실측에서도
+ * 3.5~8.5초로 편차가 커서 10초는 여유가 부족했다.
+ *
+ * 이 대기 시간은 더 이상 사용자를 붙잡지 않는다 — 전송은 등록 응답을 보낸
+ * 뒤 after() 콜백에서 실행되므로(app/api/cases/register/route.ts) 여기서
+ * 오래 기다려도 등록 응답 시간에는 영향이 없다.
+ *
+ * 30초는 관리자 stale-pending 기준(5분, lib/legacy-sync-pending.ts)보다
+ * 충분히 짧아, "정상 처리 중인 pending"이 그 기준을 넘길 일이 없다.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * 환자 성별 저장값("남"/"여")을 Sheet가 쓰는 표시값("남자"/"여자")으로
