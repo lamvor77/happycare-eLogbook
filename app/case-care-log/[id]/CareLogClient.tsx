@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-type LocationStatus = "checking" | "checked" | "unavailable";
+/**
+ * idle = 위치 확인을 아직 시작하지 않은 상태.
+ *   - 최초 질문에 답하기 전(동의 미결정)
+ *   - 또는 위치정보 사용에 동의하지 않아 앞으로도 확인하지 않는 상태
+ * 어느 쪽이든 navigator.geolocation을 호출하지 않는다.
+ */
+type LocationStatus = "idle" | "checking" | "checked" | "unavailable";
+
+/** 위치정보 사용에 동의하지 않은 채 저장할 때 남기는 미기록 사유. */
+const CONSENT_DECLINED_REASON = "consent_declined";
 
 interface CaregiverStatus {
   loggedIn: boolean;
@@ -16,6 +25,7 @@ export default function CareLogClient({
   currentCaregiverName,
   currentCaregiverRelationship,
   caregiverStatus,
+  locationConsent,
   currentCaregiverChange,
 }: {
   caseId: string;
@@ -23,6 +33,11 @@ export default function CareLogClient({
   currentCaregiverName: string | null;
   currentCaregiverRelationship: string | null;
   caregiverStatus: CaregiverStatus;
+  /**
+   * 이 사례에서 이 간병인의 위치정보 동의 상태(case_caregivers 행 값).
+   * null이면 아직 한 번도 답하지 않은 것이라 최초 질문을 띄운다.
+   */
+  locationConsent: boolean | null;
   /**
    * "현재 간병인 변경" 영역. 보여줄 조건이 아닐 때는 서버(page.tsx)가
    * 아무것도 넘기지 않으므로 이 자리에 빈 카드나 제목이 남지 않는다.
@@ -43,14 +58,30 @@ export default function CareLogClient({
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
 
-  const [locationStatus, setLocationStatus] =
-    useState<LocationStatus>("checking");
-
-  const [locationMessage, setLocationMessage] = useState(
-    "현재 위치를 확인하고 있습니다."
+  // 동의 여부에 따라 시작 상태가 다르다.
+  //   동의함(true)  -> 아래 useEffect가 바로 위치 확인을 시작한다
+  //   거부함(false) -> 확인하지 않고 미기록 사유와 함께 저장한다
+  //   미결정(null)  -> 질문에 답하기 전까지 아무것도 하지 않는다
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>(
+    locationConsent === true ? "checking" : "idle"
   );
 
-  const [locationFailureReason, setLocationFailureReason] = useState("");
+  const [locationMessage, setLocationMessage] = useState(
+    locationConsent === true
+      ? "현재 위치를 확인하고 있습니다."
+      : locationConsent === false
+        ? "위치정보를 사용하지 않기로 선택하셨습니다. 위치 없이 작성할 수 있습니다."
+        : ""
+  );
+
+  // 이 화면에서 방금 선택한 값. null이면 아직 답하지 않았다는 뜻이라
+  // 질문을 계속 보여준다(서버에서 받은 초기값을 출발점으로 쓴다).
+  const [consent, setConsent] = useState<boolean | null>(locationConsent);
+  const [savingConsent, setSavingConsent] = useState(false);
+
+  const [locationFailureReason, setLocationFailureReason] = useState(
+    locationConsent === false ? CONSENT_DECLINED_REASON : ""
+  );
   const [locationCheckedAt, setLocationCheckedAt] = useState<string | null>(
     null
   );
@@ -113,19 +144,73 @@ export default function CareLogClient({
   }, []);
 
   useEffect(() => {
-    // 마운트 시 위치 확인을 자동으로 시도한다(요구사항: 간병일지 작성 화면
-    // 진입 시 위치 확인 자동 실행). checkLocation의 setState 호출은 모두
-    // navigator.geolocation의 비동기 콜백 안에서 일어나므로 이 규칙이
-    // 우려하는 "effect 본문에서의 동기 setState"에 해당하지 않는다.
+    // 이미 위치정보 사용에 동의한 간병인만 화면 진입 시 자동으로 확인한다.
+    // 아직 답하지 않았거나(null) 거부한(false) 경우에는 navigator.geolocation을
+    // 호출하지 않는다 — 동의 전에 브라우저 권한 팝업이 먼저 뜨지 않게 하는
+    // 것이 이 기능의 핵심이다.
+    if (locationConsent !== true) {
+      return;
+    }
+
+    // checkLocation의 setState 호출은 모두 navigator.geolocation의 비동기
+    // 콜백 안에서 일어나므로 이 규칙이 우려하는 "effect 본문에서의 동기
+    // setState"에 해당하지 않는다.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkLocation();
-  }, [checkLocation]);
+  }, [checkLocation, locationConsent]);
+
+  /**
+   * 최초 1회 질문에 대한 선택을 서버에 기록하고, 동의한 경우에만 위치 확인을
+   * 시작한다. 기록에 실패하면 위치 확인을 시작하지 않는다 — 선택이 남지
+   * 않은 채 위치만 수집하는 상태를 만들지 않기 위해서다.
+   */
+  async function handleConsentDecision(agreed: boolean) {
+    if (savingConsent) {
+      return;
+    }
+
+    setSavingConsent(true);
+    setMessage("");
+
+    const response = await fetch(`/api/cases/${caseId}/location-consent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consent: agreed }),
+    });
+
+    setSavingConsent(false);
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setMessage(body?.error || "동의 정보를 저장하지 못했습니다.");
+      return;
+    }
+
+    setConsent(agreed);
+
+    if (agreed) {
+      checkLocation();
+      return;
+    }
+
+    setLocationStatus("idle");
+    setLocationFailureReason(CONSENT_DECLINED_REASON);
+    setLocationCheckedAt(new Date().toISOString());
+    setLocationMessage(
+      "위치정보를 사용하지 않기로 선택하셨습니다. 위치 없이 작성할 수 있습니다."
+    );
+  }
 
   async function handleSave() {
     setMessage("");
 
     if (locationStatus === "checking") {
       setMessage("위치 확인이 끝날 때까지 잠시 기다려주세요.");
+      return;
+    }
+
+    if (consent === null) {
+      setMessage("위치정보 사용 여부를 먼저 선택해주세요.");
       return;
     }
 
@@ -151,10 +236,16 @@ export default function CareLogClient({
         latitude: locationStatus === "checked" ? latitude : null,
         longitude: locationStatus === "checked" ? longitude : null,
         location_checked_at: locationCheckedAt || new Date().toISOString(),
+        // idle은 "동의하지 않아 확인하지 않음"이다 — 서버 계약상
+        // location_status는 checked/unavailable 둘뿐이므로 unavailable로
+        // 보내고, 사유로 그 이유를 구분한다.
         location_failure_reason:
-          locationStatus === "unavailable"
-            ? locationFailureReason || "unknown_error"
-            : null,
+          locationStatus === "checked"
+            ? null
+            : locationFailureReason ||
+              (locationStatus === "idle"
+                ? CONSENT_DECLINED_REASON
+                : "unknown_error"),
       }),
     });
 
@@ -252,10 +343,47 @@ export default function CareLogClient({
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-2">위치 확인</h2>
 
-          <p className="mb-4 text-sm text-gray-600">
-            간병일지 작성 시 위치 확인을 반드시 시도합니다.
-            위치를 확인할 수 없는 경우에만 미기록 사유가 저장됩니다.
-          </p>
+          {consent === null ? (
+            <div className="mb-4 rounded border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-bold text-gray-900">
+                신뢰도 있는 간병일지 작성을 위해 위치정보 수집·이용에
+                동의하시겠습니까?
+              </p>
+
+              <p className="mt-2 text-xs text-gray-700">
+                수집 항목: 위도·경도, 확인 시각 / 이용 목적: 간병일지 작성 위치
+                확인. 수집한 위치정보는 해당 간병일지에 기록됩니다. 동의하지
+                않아도 간병일지는 작성할 수 있으며, 이 선택은 이 사례에서 한
+                번만 여쭤봅니다.
+              </p>
+
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleConsentDecision(true)}
+                  disabled={!canWrite || savingConsent}
+                  className="w-full bg-blue-600 text-white p-3 rounded font-bold disabled:opacity-50"
+                >
+                  {savingConsent ? "처리 중..." : "동의하고 위치 확인"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleConsentDecision(false)}
+                  disabled={!canWrite || savingConsent}
+                  className="w-full border border-gray-400 text-gray-700 p-3 rounded disabled:opacity-50"
+                >
+                  동의하지 않고 작성
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mb-4 text-sm text-gray-600">
+              {consent
+                ? "간병일지 작성 시 위치 확인을 시도합니다. 위치를 확인할 수 없는 경우에만 미기록 사유가 저장됩니다."
+                : "위치정보를 사용하지 않기로 선택하셨습니다. 위치 없이 간병일지를 작성할 수 있습니다."}
+            </p>
+          )}
 
           <div className="mb-4 rounded border bg-gray-50 p-3">
             <p className="text-sm font-bold">
@@ -264,7 +392,11 @@ export default function CareLogClient({
                 ? "확인 중"
                 : locationStatus === "checked"
                   ? "확인 완료"
-                  : "확인 불가"}
+                  : locationStatus === "idle"
+                    ? consent === null
+                      ? "선택 대기"
+                      : "사용 안 함"
+                    : "확인 불가"}
             </p>
 
             <p className="mt-1 text-sm text-gray-600">
@@ -285,10 +417,13 @@ export default function CareLogClient({
             )}
           </div>
 
+          {/* 위치 재확인은 동의한 간병인에게만 의미가 있다. 거부했거나 아직
+              답하지 않았으면 이 버튼이 geolocation을 부르면 안 되므로 숨긴다. */}
           <button
             type="button"
             onClick={checkLocation}
-            disabled={!canWrite || locationStatus === "checking"}
+            hidden={consent !== true}
+            disabled={!canWrite || locationStatus === "checking" || consent !== true}
             className="w-full border border-blue-600 text-blue-600 p-3 rounded disabled:cursor-not-allowed disabled:opacity-50"
           >
             {locationStatus === "checking"
@@ -301,7 +436,7 @@ export default function CareLogClient({
           <button
             type="button"
             onClick={handleSave}
-            disabled={locationStatus === "checking" || saving}
+            disabled={locationStatus === "checking" || saving || consent === null}
             className="w-full bg-blue-600 text-white p-4 rounded-lg font-bold disabled:cursor-not-allowed disabled:bg-gray-400"
           >
             {locationStatus === "checking"

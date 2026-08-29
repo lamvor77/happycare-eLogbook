@@ -131,7 +131,9 @@ export async function requireCaseMemberSession(caseId: string) {
 
   const { data: caseCaregiverData } = await supabase
     .from("case_caregivers")
-    .select("case_caregiver_id, is_current_caregiver, relationship, cases (status)")
+    .select(
+      "case_caregiver_id, is_current_caregiver, relationship, location_consent, location_consent_at, cases (status)"
+    )
     .eq("case_id", caseId)
     .eq("caregiver_id", caregiver.caregiver_id)
     .eq("status", "활성")
@@ -143,6 +145,8 @@ export async function requireCaseMemberSession(caseId: string) {
         case_caregiver_id: string;
         is_current_caregiver: boolean;
         relationship: string;
+        location_consent: boolean | null;
+        location_consent_at: string | null;
         cases: { status: string } | { status: string }[] | null;
       }
     | null;

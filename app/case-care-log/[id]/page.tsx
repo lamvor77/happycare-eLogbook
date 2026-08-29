@@ -37,7 +37,7 @@ export default async function CaseCareLogPage({
     return <main className="p-8">{authError.message}</main>;
   }
 
-  const { supabase, caregiver } = auth;
+  const { supabase, caregiver, caseCaregiver } = auth;
 
   // caregivers(*)로 전체 컬럼을 가져오지 않는다 — 이 화면은
   // currentCaregiver.caregivers.caregiver_name만 쓴다. 주민등록번호
@@ -103,6 +103,13 @@ export default async function CaseCareLogPage({
       currentCaregiverName={currentCaregiver.caregivers?.caregiver_name ?? null}
       currentCaregiverRelationship={currentCaregiver.relationship ?? null}
       caregiverStatus={caregiverStatus}
+      /*
+       * 위치정보 동의는 (case_id, caregiver_id) 단위다 — 지금 로그인한
+       * 간병인의 case_caregivers 행 값을 그대로 넘긴다. null이면 이 사례에서
+       * 아직 한 번도 답하지 않은 것이므로 화면이 최초 질문을 띄운다.
+       * 다른 간병인의 선택은 다른 행이라 여기 섞이지 않는다.
+       */
+      locationConsent={caseCaregiver.location_consent ?? null}
       currentCaregiverChange={
         showCurrentCaregiverChange ? (
           <ChangeCurrentCaregiver

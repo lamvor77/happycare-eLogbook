@@ -27,6 +27,13 @@ export interface CaseCaregiver {
   is_primary_caregiver: boolean;
   is_current_caregiver: boolean;
   status: string;
+  /**
+   * 간병일지 위치정보 수집·이용 동의. null이면 아직 최초 질문에 답하지
+   * 않은 상태다(질문을 보여줄 대상). 동의 범위는 이 행의 (case_id,
+   * caregiver_id) 조합이며 다른 간병인에게 상속되지 않는다.
+   */
+  location_consent?: boolean | null;
+  location_consent_at?: string | null;
   caregivers?: Caregiver | null;
 }
 
