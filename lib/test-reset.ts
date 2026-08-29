@@ -28,6 +28,8 @@ export interface TestResetCounts {
   care_logs: number;
   care_log_photos: number;
   consents: number;
+  /** 이 사례들에 달린 간병인 등록 건(initial/family_join). */
+  caregiver_registrations: number;
   histories: number;
   sessions: number;
   otp_codes: number;
@@ -61,6 +63,7 @@ function emptyCounts(): TestResetCounts {
     care_logs: 0,
     care_log_photos: 0,
     consents: 0,
+    caregiver_registrations: 0,
     histories: 0,
     sessions: 0,
     otp_codes: 0,
@@ -246,6 +249,15 @@ export async function buildPhonePreview(
       .eq("caregiver_id", caregiver.caregiver_id);
 
     counts.consents = consentCount || 0;
+
+    // 삭제 대상 사례들에 달린 등록 건. 실제 삭제도 case_id 기준으로
+    // 이뤄지므로(reset_test_case_data) preview도 같은 기준으로 센다.
+    const { count: registrationCount } = await supabase
+      .from("caregiver_registrations")
+      .select("*", { count: "exact", head: true })
+      .in("case_id", caseIds);
+
+    counts.caregiver_registrations = registrationCount || 0;
   }
 
   const { count: sessionCount } = await supabase
@@ -307,6 +319,13 @@ async function buildCountsForCaseIds(
     .in("case_id", caseIds);
 
   counts.consents = consentCount || 0;
+
+  const { count: registrationCount } = await supabase
+    .from("caregiver_registrations")
+    .select("*", { count: "exact", head: true })
+    .in("case_id", caseIds);
+
+  counts.caregiver_registrations = registrationCount || 0;
 
   const { count: historyCount } = await supabase
     .from("case_history")
@@ -456,6 +475,7 @@ export function buildCountsSummary(counts: TestResetCounts): string {
     `간병일지 ${counts.care_logs}`,
     `사진 ${counts.care_log_photos}`,
     `동의 ${counts.consents}`,
+    `간병인 등록 ${counts.caregiver_registrations}`,
     `이력 ${counts.histories}`,
     `세션 ${counts.sessions}`,
     `OTP ${counts.otp_codes}`,

@@ -26,6 +26,7 @@ interface PreviewCounts {
   care_logs: number;
   care_log_photos: number;
   consents: number;
+  caregiver_registrations: number;
   histories: number;
   sessions: number;
   otp_codes: number;
@@ -48,6 +49,7 @@ const COUNT_LABELS: { key: keyof PreviewCounts; label: string }[] = [
   { key: "care_logs", label: "간병일지" },
   { key: "care_log_photos", label: "사진" },
   { key: "consents", label: "동의" },
+  { key: "caregiver_registrations", label: "간병인 등록" },
   { key: "histories", label: "이력" },
   { key: "sessions", label: "세션" },
   { key: "otp_codes", label: "OTP" },

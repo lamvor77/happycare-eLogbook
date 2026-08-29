@@ -34,7 +34,10 @@ interface ResetRpcRow {
   deleted_hospitals: number;
 }
 
-function toCounts(row: ResetRpcRow): TestResetCounts {
+function toCounts(
+  row: ResetRpcRow,
+  deletedRegistrations: number
+): TestResetCounts {
   return {
     caregivers: row.deleted_caregivers,
     cases: row.deleted_cases,
@@ -42,6 +45,10 @@ function toCounts(row: ResetRpcRow): TestResetCounts {
     care_logs: row.deleted_care_logs,
     care_log_photos: row.deleted_care_log_photos,
     consents: row.deleted_consents,
+    // 초기화 RPC는 반환 타입을 바꾸지 않기 위해 이 건수를 돌려주지 않는다
+    // (CREATE OR REPLACE로는 반환 타입을 바꿀 수 없다). 대신 삭제 직전에
+    // 같은 기준(case_id)으로 세어 둔 값을 그대로 쓴다.
+    caregiver_registrations: deletedRegistrations,
     histories: row.deleted_histories,
     sessions: row.deleted_sessions,
     otp_codes: row.deleted_otp_codes,
@@ -265,6 +272,20 @@ export async function POST(request: Request) {
     };
   }
 
+  // 삭제될 등록 건 수를 미리 센다 — RPC가 이 값을 반환하지 않으므로,
+  // 실제 삭제와 같은 기준(case_id)으로 삭제 직전에 집계해 감사 로그에
+  // 정확한 건수를 남긴다. 개인정보는 조회하지 않는다(건수만).
+  let deletedRegistrations = 0;
+
+  if (targetCaseIds.length > 0) {
+    const { count: registrationCount } = await admin
+      .from("caregiver_registrations")
+      .select("*", { count: "exact", head: true })
+      .in("case_id", targetCaseIds);
+
+    deletedRegistrations = registrationCount || 0;
+  }
+
   const { data: rpcData, error: rpcError } = await admin.rpc(rpcName, rpcArgs);
 
   if (rpcError) {
@@ -281,7 +302,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "초기화 처리에 실패했습니다." }, { status: 500 });
   }
 
-  const counts = toCounts(row);
+  const counts = toCounts(row, deletedRegistrations);
 
   // ---- 3) 감사 로그(건수만, PII 없음) ----
   const summary = `${buildCountsSummary(counts)}, 병원 ${row.deleted_hospitals}, Storage 파일 ${storageResult.removed}`;
