@@ -560,18 +560,38 @@ export default function CareLogClient({
             저장됩니다.
           </p>
 
-          {/* capture 속성을 넣지 않는다 — 넣으면 카메라가 곧바로 열려
+          {/* 기본 <input type="file">은 브라우저마다 "파일 선택 / 선택된 파일
+              없음" 같은 제각각의 모양으로 그려져 버튼으로 보이지 않는다.
+              입력 자체는 화면에서 숨기고(sr-only — 접근성 도구와 키보드에는
+              그대로 노출된다) 같은 화면의 다른 버튼과 같은 모양의 label로
+              누르게 한다.
+
+              capture 속성은 넣지 않는다 — 넣으면 카메라가 곧바로 열려
               앨범에서 고르는 길이 막힌다. 지정하지 않으면 모바일에서
               "촬영 / 앨범" 선택지가 자연스럽게 뜬다. */}
           <input
+            id="care-log-photo-input"
             type="file"
             accept={ALLOWED_PHOTO_MIME_TYPES.join(",")}
             disabled={!canWrite || saving}
             onChange={(event) =>
               handlePhotoSelect(event.target.files?.[0] ?? null)
             }
-            className="w-full text-sm disabled:opacity-50"
+            className="sr-only"
           />
+
+          <label
+            htmlFor="care-log-photo-input"
+            aria-disabled={!canWrite || saving}
+            className={
+              "block w-full border border-blue-600 text-blue-600 p-3 rounded text-center font-bold min-h-[44px] " +
+              (!canWrite || saving
+                ? "pointer-events-none opacity-50"
+                : "cursor-pointer")
+            }
+          >
+            {photoFile ? "다른 사진 선택" : "사진 선택"}
+          </label>
 
           {photoError && (
             <p className="mt-2 text-sm text-red-600">{photoError}</p>
