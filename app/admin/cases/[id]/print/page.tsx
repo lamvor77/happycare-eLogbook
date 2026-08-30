@@ -140,7 +140,7 @@ export default async function AdminCasePrintPage({
   }-${today.replaceAll("-", "")}`;
 
   return (
-    <main className="p-6 md:p-8 max-w-6xl mx-auto bg-white">
+    <main className="p-6 md:p-8 print:p-0 max-w-6xl mx-auto bg-white">
       {/* 관리자 화면 전용 상태 표시 — 인쇄 시 숨김(print:hidden), 문서
           내용에는 포함되지 않는다. */}
       <div className="print:hidden mb-4 rounded border p-3 text-sm text-gray-800 bg-gray-50">
@@ -175,7 +175,10 @@ export default async function AdminCasePrintPage({
       <section className="mb-6 border rounded p-4">
         <h2 className="font-bold mb-3">병원 및 환자 정보</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+        {/* 인쇄에서도 2열을 유지한다. md: 는 뷰포트 768px 이상에서만 적용되는데
+            인쇄 기준 폭은 A4에서 여백을 뺀 약 700px이라 조건에 걸리지 않아
+            화면(2열)과 인쇄물(1열)이 달라 보였다. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-2 text-sm">
           <p>
             병원명: {caseData.hospitals?.hospital_name || "-"}
           </p>
@@ -238,24 +241,31 @@ export default async function AdminCasePrintPage({
       <section>
         <h2 className="font-bold mb-3">통합 간병일지</h2>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] border-collapse border text-xs">
+        {/* 표는 컬럼이 14개라 화면에서는 1200px를 확보하고 가로 스크롤로
+            본다. 그런데 인쇄에는 스크롤이 없어 A4 세로 폭(약 650~720px)을
+            넘는 부분이 그대로 잘려 나갔다 — 뒤쪽의 미기록 사유/전자서명/
+            특이사항이 인쇄물에서 사라졌다. 증빙 문서에서 서명과 특이사항이
+            빠지면 안 되므로, 인쇄할 때만 최소 폭을 풀고(print:min-w-0)
+            글자·여백을 줄여 14개 컬럼을 페이지 안에 담는다. 화면 레이아웃은
+            그대로다. */}
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full min-w-[1200px] print:min-w-0 border-collapse border text-xs print:text-[8px]">
             <thead>
               <tr>
-                <th className="border p-2">간병일자</th>
-                <th className="border p-2">작성일시</th>
-                <th className="border p-2">작성자</th>
-                <th className="border p-2">관계</th>
-                <th className="border p-2">식사</th>
-                <th className="border p-2">이동</th>
-                <th className="border p-2">배설</th>
-                <th className="border p-2">위생</th>
-                <th className="border p-2">체위</th>
-                <th className="border p-2">위치 확인</th>
-                <th className="border p-2">위치 확인 시간</th>
-                <th className="border p-2">미기록 사유</th>
-                <th className="border p-2">전자서명</th>
-                <th className="border p-2">특이사항</th>
+                <th className="border p-2 print:p-1">간병일자</th>
+                <th className="border p-2 print:p-1">작성일시</th>
+                <th className="border p-2 print:p-1">작성자</th>
+                <th className="border p-2 print:p-1">관계</th>
+                <th className="border p-2 print:p-1">식사</th>
+                <th className="border p-2 print:p-1">이동</th>
+                <th className="border p-2 print:p-1">배설</th>
+                <th className="border p-2 print:p-1">위생</th>
+                <th className="border p-2 print:p-1">체위</th>
+                <th className="border p-2 print:p-1">위치 확인</th>
+                <th className="border p-2 print:p-1">위치 확인 시간</th>
+                <th className="border p-2 print:p-1">미기록 사유</th>
+                <th className="border p-2 print:p-1">전자서명</th>
+                <th className="border p-2 print:p-1">특이사항</th>
               </tr>
             </thead>
 
@@ -267,51 +277,66 @@ export default async function AdminCasePrintPage({
 
                   return (
                     <tr key={log.log_id}>
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.care_date || "-"}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1">
                         {formatKstDateTime(log.created_at)}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1">
                         {log.writer_name || log.signature_name || "-"}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1">
                         {log.relationship || "-"}
                       </td>
 
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.meal_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.move_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.toilet_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.hygiene_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 text-center">
+                      <td className="border p-2 print:p-1 text-center">
                         {log.position_change ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 text-center">
-                        {locationChecked ? "확인 완료" : "미기록"}
+                      {/* 위치는 이 문서의 핵심 증빙이라 "확인 완료"만으로는
+                          부족하다 — 실제 측정 좌표를 함께 싣는다. 컬럼을
+                          늘리지 않고 같은 칸에 쌓아 표 폭에 영향을 주지
+                          않는다. 주소로 바꾸려면 외부 지오코딩이 필요하다. */}
+                      <td className="border p-2 print:p-1 text-center break-words">
+                        {locationChecked ? (
+                          <>
+                            확인 완료
+                            {log.latitude != null && log.longitude != null && (
+                              <span className="block">
+                                {log.latitude}, {log.longitude}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          "미기록"
+                        )}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1">
                         {formatKstDateTime(log.location_checked_at)}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1 break-words">
                         {locationChecked
                           ? "-"
                           : getLocationFailureLabel(
@@ -319,13 +344,13 @@ export default async function AdminCasePrintPage({
                             )}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1">
                         {log.signature_name ||
                           log.writer_name ||
                           "-"}
                       </td>
 
-                      <td className="border p-2">
+                      <td className="border p-2 print:p-1 break-words">
                         {log.memo || "-"}
                       </td>
                     </tr>
@@ -335,7 +360,7 @@ export default async function AdminCasePrintPage({
                 <tr>
                   <td
                     colSpan={14}
-                    className="border p-6 text-center text-gray-700"
+                    className="border p-6 print:p-2 text-center text-gray-700"
                   >
                     작성된 간병일지가 없습니다.
                   </td>
