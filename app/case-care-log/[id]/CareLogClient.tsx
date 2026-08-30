@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
-  ALLOWED_PHOTO_MIME_TYPES,
   MAX_PHOTO_BYTES,
   PHOTO_JPEG_QUALITY,
   PHOTO_MAX_DIMENSION,
@@ -268,11 +267,15 @@ export default function CareLogClient({
       return;
     }
 
-    // 화면에서 먼저 걸러 사용자에게 즉시 알려준다. 실제 방어는 서버가 한다.
-    if (!isAllowedPhotoMimeType(file.type)) {
+    // 선택 시점에는 "이미지인가"만 본다. accept이 image/* 라 HEIC 같은
+    // 형식도 고를 수 있는데, 그런 파일도 아래 압축 과정에서 브라우저가
+    // 디코딩할 수 있으면 JPEG로 바뀌어 정상 업로드된다 — 여기서 형식을
+    // 엄격히 막으면 실제로는 올릴 수 있는 사진을 미리 거절하게 된다.
+    // 최종 형식 판정은 압축 뒤(uploadPhoto)와 서버가 한다.
+    if (!file.type.startsWith("image/")) {
       setPhotoFile(null);
       setPhotoPreview(null);
-      setPhotoError("JPG, PNG, WebP 형식의 사진만 첨부할 수 있습니다.");
+      setPhotoError("사진 파일만 첨부할 수 있습니다.");
       return;
     }
 
@@ -298,6 +301,14 @@ export default function CareLogClient({
     }
 
     const compressed = await compressPhoto(photoFile);
+
+    // 압축이 성공하면 JPEG가 되고, 실패하면 원본 그대로다. 서버가 거부할
+    // 형식이면 요청을 보내기 전에 여기서 알려준다.
+    if (!isAllowedPhotoMimeType(compressed.type)) {
+      setPhotoError("이 형식의 사진은 첨부할 수 없습니다. 다른 사진을 선택해주세요.");
+      return false;
+    }
+
     const form = new FormData();
     form.append("photo", compressed);
 
@@ -566,13 +577,18 @@ export default function CareLogClient({
               그대로 노출된다) 같은 화면의 다른 버튼과 같은 모양의 label로
               누르게 한다.
 
+              accept은 구체적인 MIME 목록이 아니라 image/* 로 둔다. 목록을
+              나열하면 안드로이드(삼성 인터넷 등)가 인텐트를 제대로 매칭하지
+              못해 갤러리 대신 카메라/캠코더만 뜨는 일이 생긴다. image/* 는
+              표준적으로 처리되어 갤러리가 정상적으로 나온다. 실제 형식
+              제한은 아래 선택 시점과 서버가 각각 검사한다.
+
               capture 속성은 넣지 않는다 — 넣으면 카메라가 곧바로 열려
-              앨범에서 고르는 길이 막힌다. 지정하지 않으면 모바일에서
-              "촬영 / 앨범" 선택지가 자연스럽게 뜬다. */}
+              앨범에서 고르는 길이 막힌다. */}
           <input
             id="care-log-photo-input"
             type="file"
-            accept={ALLOWED_PHOTO_MIME_TYPES.join(",")}
+            accept="image/*"
             disabled={!canWrite || saving}
             onChange={(event) =>
               handlePhotoSelect(event.target.files?.[0] ?? null)
