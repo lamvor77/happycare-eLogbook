@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   MAX_PHOTO_BYTES,
-  PHOTO_JPEG_QUALITY,
-  PHOTO_MAX_DIMENSION,
   isAllowedPhotoMimeType,
 } from "@/lib/care-log-photo";
+import { compressPhoto } from "@/lib/care-log-photo-client";
 
 /**
  * idle = 위치 확인을 아직 시작하지 않은 상태.
@@ -18,47 +17,6 @@ type LocationStatus = "idle" | "checking" | "checked" | "unavailable";
 
 /** 위치정보 사용에 동의하지 않은 채 저장할 때 남기는 미기록 사유. */
 const CONSENT_DECLINED_REASON = "consent_declined";
-
-/**
- * 업로드 전에 사진을 줄인다. 요즘 폰 원본은 3~8MB라 그대로 올리면 실패가
- * 잦고, canvas로 다시 그려 내보내면 EXIF(촬영 위치 등)가 함께 사라져
- * 개인정보 측면에서도 유리하다. 압축에 실패하면 원본을 그대로 쓴다 —
- * 서버가 형식/용량을 다시 검증하므로 안전하다.
- */
-async function compressPhoto(file: File): Promise<File> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(
-      1,
-      PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
-    );
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      return file;
-    }
-
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY)
-    );
-
-    if (!blob) {
-      return file;
-    }
-
-    return new File([blob], "photo.jpg", { type: "image/jpeg" });
-  } catch {
-    return file;
-  }
-}
 
 interface CaregiverStatus {
   loggedIn: boolean;

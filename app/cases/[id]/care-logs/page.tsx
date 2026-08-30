@@ -1,8 +1,14 @@
 import { redirect } from "next/navigation";
 import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
 import type { CareLog, Hospital } from "@/types/domain";
-import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
+import {
+  CARE_LOG_EDIT_WINDOW_MS,
+  CARE_LOG_PHOTO_BUCKET,
+  isWithinCareLogEditWindow,
+} from "@/lib/care-log-photo";
 import { getAdminViewerSession } from "@/lib/admin-auth";
+import { formatKstDateTime } from "@/lib/kst";
+import CareLogEditor from "./CareLogEditor";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
@@ -123,6 +129,21 @@ export default async function CaseCareLogsPage({
     }
   }
 
+  // 작성 후 짧은 창 안에서는 자기가 쓴 일지를 정정할 수 있다. 여기서
+  // 정하는 것은 "수정 UI를 보여줄지"뿐이고, 실제 허용 여부는 서버 라우트가
+  // 다시 판정한다(app/api/cases/[id]/care-logs/[logId]/route.ts). 관리자
+  // 조회(auth === null)에는 수정 UI를 보여주지 않는다 — 이 화면은 관리자에게
+  // 조회 전용이다.
+  const memberCaseStatus = Array.isArray(auth?.caseCaregiver.cases)
+    ? auth?.caseCaregiver.cases[0]?.status
+    : auth?.caseCaregiver.cases?.status;
+
+  const canEditOwnLogs =
+    Boolean(auth?.caseCaregiver.is_current_caregiver) &&
+    memberCaseStatus === "입원중";
+
+  const viewerCaregiverId = auth?.caregiver.caregiver_id ?? null;
+
   if (error) {
     console.error(
       "간병일지 조회 실패:",
@@ -175,9 +196,7 @@ export default async function CaseCareLogsPage({
 
                   <p className="text-sm text-gray-700">
                     작성시간:{" "}
-                    {log.created_at
-                      ? new Date(log.created_at).toLocaleString("ko-KR")
-                      : "-"}
+                    {formatKstDateTime(log.created_at)}
                   </p>
                 </div>
 
@@ -230,11 +249,7 @@ export default async function CaseCareLogsPage({
                     <>
                       <p className="mt-1 text-gray-700">
                         확인시간:{" "}
-                        {log.location_checked_at
-                          ? new Date(
-                              log.location_checked_at
-                            ).toLocaleString("ko-KR")
-                          : "-"}
+                        {formatKstDateTime(log.location_checked_at)}
                       </p>
 
                       <p className="mt-1 text-xs text-gray-700">
@@ -281,6 +296,28 @@ export default async function CaseCareLogsPage({
                     />
                   </div>
                 )}
+
+                {canEditOwnLogs &&
+                  log.caregiver_id === viewerCaregiverId &&
+                  isWithinCareLogEditWindow(log.created_at) && (
+                    <CareLogEditor
+                      caseId={id}
+                      logId={log.log_id}
+                      hasPhoto={photoUrlByLogId.has(log.log_id)}
+                      editableUntil={new Date(
+                        new Date(log.created_at as string).getTime() +
+                          CARE_LOG_EDIT_WINDOW_MS
+                      ).toISOString()}
+                      initialValues={{
+                        meal_assist: Boolean(log.meal_assist),
+                        move_assist: Boolean(log.move_assist),
+                        toilet_assist: Boolean(log.toilet_assist),
+                        hygiene_assist: Boolean(log.hygiene_assist),
+                        position_change: Boolean(log.position_change),
+                        memo: log.memo || "",
+                      }}
+                    />
+                  )}
               </div>
             );
           })

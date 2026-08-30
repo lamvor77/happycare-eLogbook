@@ -8,7 +8,7 @@ import {
   MAX_PHOTO_BYTES,
   buildPhotoStoragePath,
   isAllowedPhotoMimeType,
-  isWithinPhotoEditWindow,
+  isWithinCareLogEditWindow,
 } from "@/lib/care-log-photo";
 
 /**
@@ -16,8 +16,9 @@ import {
  *
  * 사진은 선택사항이고 일지 1건당 1장이다. 잘못 올린 사진을 되돌릴 수
  * 있어야 하므로 작성 후 짧은 정정 창(lib/care-log-photo.ts의
- * PHOTO_EDIT_WINDOW_MS) 안에서만 추가/삭제를 허용한다. 교체는 삭제 후
- * 다시 추가하는 것으로 처리한다.
+ * CARE_LOG_EDIT_WINDOW_MS) 안에서만 추가/삭제를 허용한다. 본문 정정
+ * (../route.ts의 PATCH)과 같은 창을 쓴다. 교체는 삭제 후 다시 추가하는
+ * 것으로 처리한다.
  *
  * *** 권한 ***
  * 간병일지 작성과 같은 조건을 요구한다(로그인 + 이 사례의 현재 간병인 본인
@@ -92,7 +93,7 @@ async function loadEditableLog(
     };
   }
 
-  if (!isWithinPhotoEditWindow(log.created_at)) {
+  if (!isWithinCareLogEditWindow(log.created_at)) {
     return {
       response: NextResponse.json(
         { error: "사진을 추가하거나 삭제할 수 있는 시간이 지났습니다." },

@@ -51,12 +51,15 @@ export const PHOTO_MAX_DIMENSION = 1600;
 export const PHOTO_JPEG_QUALITY = 0.8;
 
 /**
- * 작성 후 이 시간 안에서만 사진을 추가/삭제할 수 있다.
+ * 작성 후 이 시간 안에서만 일지를 고치거나 사진을 추가/삭제할 수 있다.
  *
- * 잘못 올린 사진을 되돌릴 수 없으면 곤란하므로 짧은 정정 창을 둔다. 판정은
- * 반드시 서버에서 한다 — 클라이언트 시계는 신뢰할 수 없다.
+ * 간병일지는 증빙 기록이라 원래 작성 후 수정이 불가능했지만, 오타나 잘못
+ * 올린 사진 하나 때문에 틀린 기록이 영구히 남는 것도 곤란해 짧은 정정 창을
+ * 둔다. 본문과 사진이 서로 다른 시간을 갖지 않도록 이 상수 하나만 쓴다.
+ *
+ * 판정은 반드시 서버에서 한다 — 클라이언트 시계는 신뢰할 수 없다.
  */
-export const PHOTO_EDIT_WINDOW_MS = 60 * 60 * 1000;
+export const CARE_LOG_EDIT_WINDOW_MS = 60 * 60 * 1000;
 
 export type AllowedPhotoMimeType = (typeof ALLOWED_PHOTO_MIME_TYPES)[number];
 
@@ -72,12 +75,12 @@ export function photoExtensionFor(mimeType: AllowedPhotoMimeType): string {
 }
 
 /**
- * 아직 사진을 추가/삭제할 수 있는 시점인지 판단한다.
+ * 아직 일지를 고치거나 사진을 추가/삭제할 수 있는 시점인지 판단한다.
  *
  * createdAt을 읽을 수 없으면 false를 돌려준다(fail-closed) — 기준 시각을
  * 모르는 채로 증빙 기록을 바꾸게 두지 않는다.
  */
-export function isWithinPhotoEditWindow(
+export function isWithinCareLogEditWindow(
   createdAt: string | null | undefined,
   now: number = Date.now()
 ): boolean {
@@ -91,7 +94,7 @@ export function isWithinPhotoEditWindow(
     return false;
   }
 
-  return now - created < PHOTO_EDIT_WINDOW_MS;
+  return now - created < CARE_LOG_EDIT_WINDOW_MS;
 }
 
 /**
