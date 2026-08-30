@@ -214,15 +214,60 @@ INSERT는 `care_logs_insert_current_caregiver`(현재 간병인 본인만,
 
 ### 3.6 care_log_photos
 
-RLS 정책(`care_log_photos_select`/`care_log_photos_insert`)과
-`pre_rls_audit.sql`의 고아 데이터 점검 쿼리에서 `log_id` 컬럼 존재만
-확인된다. **현재 이 테이블에 쓰는 신규 코드 경로가 없다** — 사진 업로드를
-구현했던 레거시 `app/care-log/[id]/page.tsx`는 6단계에서 삭제되었고
-(`docs/rls-rollout.md` 참고), 그 이후 신규 플로우(`app/api/cases/[id]/
-care-logs`)는 사진 첨부를 구현하지 않았다. Storage 버킷 `care-log-photos`에
-대한 RLS만 선제적으로 준비되어 있다(`20260803120500_rls_policies.sql`
-8절). `care_logs`를 향한 FK 존재 여부는 코드로 확인할 수 없어 "미확인"으로
-남긴다.
+간병일지 첨부 사진. **현재 실제로 사용 중이다.**
+
+| 컬럼 | 근거 |
+| --- | --- |
+| photo_id | `app/api/cases/[id]/care-logs/[logId]/photos/route.ts` select(PK로 추정) |
+| log_id | RLS 정책 + 모든 조회/삽입 |
+| file_url | 〃. **공개 URL이 아니라 Storage 객체 경로**가 들어간다(컬럼 이름은 과거 설계의 흔적) |
+
+`care_logs`를 향한 FK 존재 여부와 `ON DELETE` 옵션은 코드로 확인할 수 없어
+"미확인"으로 남긴다. 다만 삭제 순서는 코드가 항상 명시하므로 FK 옵션에
+의존하지 않는다 — QA 초기화 RPC와 애플리케이션 모두 `care_log_photos`를
+`care_logs`보다 먼저 지운다.
+
+**정책**(단일 출처: `lib/care-log-photo.ts`)
+
+- 사진은 **선택사항**이고 **일지 1건당 최대 1장**(`MAX_PHOTOS_PER_LOG`).
+  교체는 삭제 후 재첨부로 처리한다.
+- 허용 형식은 JPEG/PNG/WebP, 장당 상한 10MB(`MAX_PHOTO_BYTES`).
+- 업로드 전 화면에서 canvas로 재인코딩한다(긴 변 1600px, JPEG 품질 0.8).
+  용량을 줄이는 것이 1차 목적이고, **EXIF(촬영 위치 등)가 함께 제거되는
+  것이 2차 효과**다(`lib/care-log-photo-client.ts`).
+- 작성 후 `CARE_LOG_EDIT_WINDOW_MS`(현재 1시간) 안에서만 추가/삭제할 수
+  있다. 본문 정정과 같은 상수를 쓰므로 두 기준이 갈릴 수 없다.
+
+**Storage**
+
+- 버킷 `care-log-photos`는 **private**이다. 코드에 `getPublicUrl` 호출이
+  하나도 없고, 조회는 매번 30분짜리 `createSignedUrl`로만 한다.
+- 버킷 자체에도 `file_size_limit = 10485760`(10MB)과
+  `allowed_mime_types = {image/jpeg, image/png, image/webp}`가 설정되어
+  있다(2026-08-30 운영 확인). `lib/care-log-photo.ts`의 상수와 같은 값을
+  유지해야 한다 — 한쪽만 바꾸면 "서버는 통과시켰는데 Storage가 거부"하는
+  원인 찾기 어려운 실패가 난다.
+- 객체 경로는 `{log_id}/{uuid}.{확장자}` — **원본 파일명을 저장하지
+  않는다**(파일명에 환자명 등이 섞여 들어올 수 있다). 첫 폴더를 log_id로
+  두는 규칙은 Storage RLS가 `storage.foldername(name)[1]`로 대조하는
+  형태와 맞춘 것이다(`20260803120500_rls_policies.sql` 8절).
+
+**권한**
+
+- **caregiver 클라이언트는 Storage에 직접 접근하지 않는다.** 브라우저는
+  자기 서버 라우트에만 `FormData`로 POST하고, service_role 키는 서버에만
+  있다.
+- 서버 라우트가 권한을 검증한 뒤 service_role로 처리한다 — 로그인 +
+  이 사례의 현재 간병인 + **그 일지를 쓴 본인** + 정정 창 안.
+- 테이블 RLS는 `care_log_photos_select`/`care_log_photos_insert`가 있고
+  UPDATE/DELETE 정책은 없다(`revoke update, delete`). 이 설정을 열지 않고
+  service_role 서버 라우트로만 삭제를 허용하므로, 클라이언트 직접 삭제는
+  계속 차단된 상태로 남는다.
+- 다만 이 정책들이 쓰는 `my_case_ids()`/`current_caregiver_id()`는
+  `caregivers.auth_user_id = auth.uid()`를 전제로 한다. 간병인 인증이
+  자체 세션 쿠키로 바뀐 뒤로 이 조건이 성립하지 않아 **정책이 실질적으로
+  동작하지 않으며, 실제 방어는 전적으로 서버 라우트가 한다**(사진 기능에
+  국한된 문제가 아니라 프로젝트 전반의 상태다 — 별도 보안 감사 과제).
 
 ### 3.7 case_history
 

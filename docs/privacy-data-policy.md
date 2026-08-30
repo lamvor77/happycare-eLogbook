@@ -18,7 +18,7 @@
 | 환자(cases) | 성명, **생년월일(8자리 YYYYMMDD 필수, 서버에서 날짜로 검증·변환, 4절)**, 연락처, 성별, 진단명, 입원호실, 보험사(+"기타" 상세), 사고유형, 현재상태, 담당설계사 정보 | 사례(case) 단위로 저장. 환자는 주민등록번호를 수집하지 않는다 |
 | 동의 기록(case_consents) | 등록 동의 6개 항목(boolean) + 동의 문구 버전 + 동의 시각 | IP/User-Agent는 저장하지 않는다(최소 수집 원칙, 운영 확인 필요 — 8절) |
 | 위치정보(care_logs) | 간병일지 작성 시점의 위도/경도 또는 미기록 사유 | 작성 시점 1회성 기록, 실시간 위치추적 아님 |
-| 사진(care_log_photos) | 간병 증빙 사진 파일(스키마만 존재, 현재 업로드 코드 경로 없음) | Supabase Storage `care-log-photos` 버킷(`docs/data-model.md` 3.6절) |
+| 사진(care_log_photos) | 간병 증빙 사진 파일. **선택사항이며 일지 1건당 최대 1장**. 환자 얼굴·병실이 찍힐 수 있어 개인정보로 취급한다 | Supabase Storage `care-log-photos` **private** 버킷. 조회는 30분짜리 signed URL로만, 객체 경로는 UUID 기반(원본 파일명 미저장), 업로드 전 재인코딩으로 EXIF 제거(`docs/data-model.md` 3.6절) |
 
 ## 2. 수집 목적
 
