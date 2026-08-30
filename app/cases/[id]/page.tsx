@@ -9,6 +9,7 @@ import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
 import type { CaseCaregiver, CareLog } from "@/types/domain";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
+import { getAdminViewerSession } from "@/lib/admin-auth";
 
 export default async function CaseDetailPage({
   params,
@@ -23,7 +24,8 @@ export default async function CaseDetailPage({
   // (현재 간병인 여부는 여기서 요구하지 않는다 — 쓰기 기능은 각 버튼이
   // 호출하는 API가 requireCurrentCaregiverSession()으로 별도 검증한다).
   // 클라이언트가 보낸 caregiver_id는 신뢰하지 않고 세션 쿠키로만 식별한다.
-  let auth;
+  let auth = null;
+  let adminSupabase = null;
 
   try {
     auth = await requireCaseMemberSession(id);
@@ -32,16 +34,29 @@ export default async function CaseDetailPage({
       throw authError;
     }
 
-    if (authError.status === 401) {
-      redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}`)}`);
+    // 관리자는 사례에 간병인으로 연결되어 있지 않아 위 검증을 통과할 수
+    // 없다. 관리자 화면에서 "사례 보기"로 들어온 경우까지 간병인 휴대폰
+    // 인증을 요구하면 볼 수 있는 사례가 하나도 없게 되므로, 관리자 세션이면
+    // 조회만 허용한다. 관리자가 아니면 지금까지와 똑같이 처리한다.
+    const adminViewer = await getAdminViewerSession();
+
+    if (!adminViewer) {
+      if (authError.status === 401) {
+        redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}`)}`);
+      }
+
+      // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
+      // 경우에도 환자 정보는 노출하지 않는다.
+      return <main className="p-8">{authError.message}</main>;
     }
 
-    // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
-    // 경우에도 환자 정보는 노출하지 않는다.
-    return <main className="p-8">{authError.message}</main>;
+    adminSupabase = adminViewer.supabase;
   }
 
-  const { supabase, caseCaregiver } = auth;
+  // 관리자로 들어온 경우 caseCaregiver가 없다 — 아래에서 canManage를 false로
+  // 두어 현재 간병인 변경/간병종료 같은 쓰기 기능이 노출되지 않게 한다.
+  const supabase = auth?.supabase ?? adminSupabase!;
+  const caseCaregiver = auth?.caseCaregiver ?? null;
 
   const { data: caseData, error: caseError } = await supabase
     .from("cases")
@@ -130,10 +145,13 @@ export default async function CaseDetailPage({
   // requireCaseMemberSession()이 이미 확인한 caseCaregiver 정보로 계산한다
   // (별도 조회 없이) — 현재 간병인이면서 사례가 아직 "입원중"일 때만 현재
   // 간병인 변경/간병종료 같은 관리 기능을 노출한다.
-  const memberCaseStatus = Array.isArray(caseCaregiver.cases)
-    ? caseCaregiver.cases[0]?.status
-    : caseCaregiver.cases?.status;
-  const canManage = caseCaregiver.is_current_caregiver && memberCaseStatus === "입원중";
+  const memberCaseStatus = Array.isArray(caseCaregiver?.cases)
+    ? caseCaregiver?.cases[0]?.status
+    : caseCaregiver?.cases?.status;
+
+  // 관리자 조회(caseCaregiver === null)에서는 항상 false다.
+  const canManage =
+    Boolean(caseCaregiver?.is_current_caregiver) && memberCaseStatus === "입원중";
 
   // 변경 후보와 노출 여부는 lib/case-caregivers.ts의 공통 규칙으로 계산한다
   // — 간병일지 작성 화면과 판단이 갈리지 않게 하기 위해서다. 후보 목록은

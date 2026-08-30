@@ -38,6 +38,31 @@ async function getAdminSession() {
 }
 
 /**
+ * 간병인용 조회 화면(app/cases/[id] 등)에서 "관리자면 그냥 보여준다"는
+ * 폴백으로 쓴다. 리다이렉트하지도 예외를 던지지도 않고, 관리자가 아니면
+ * null을 돌려준다 — 호출부가 기존 간병인 흐름을 그대로 이어갈 수 있어야
+ * 하기 때문이다.
+ *
+ * 관리자는 사례에 간병인으로 연결되어 있지 않으므로 case_caregivers 행이
+ * 없다. 따라서 이 경로로 들어온 화면은 조회만 가능해야 하고, 현재 간병인
+ * 변경·간병종료 같은 쓰기 기능을 노출해서는 안 된다(호출부에서 canManage를
+ * false로 둔다). 실제 쓰기 API들도 각자 간병인 세션을 따로 검증하므로
+ * 이 폴백만으로는 아무것도 바꿀 수 없다.
+ *
+ * 반환하는 supabase는 관리자 로그인 세션이 바인딩된 클라이언트다 — 조회는
+ * cases/care_logs/care_log_photos의 is_admin() 정책을 타고 통과한다.
+ */
+export async function getAdminViewerSession() {
+  const session = await getAdminSession();
+
+  if (!session || !session.isAdmin) {
+    return null;
+  }
+
+  return { supabase: session.supabase, email: session.email };
+}
+
+/**
  * 페이지(Server Component)에서 사용한다. 로그인 여부와 관리자 이메일 목록을
  * 서버에서 검증한다. 비로그인 -> /admin/login, 로그인했지만 비관리자 ->
  * /admin/access-denied 로 리다이렉트한다.

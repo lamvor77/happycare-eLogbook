@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
 import type { CareLog, Hospital } from "@/types/domain";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
+import { getAdminViewerSession } from "@/lib/admin-auth";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
@@ -23,7 +24,8 @@ export default async function CaseCareLogsPage({
   // 한다. "로그인 + 이 사례에 활성 상태로 연결된 caregiver인지"만 확인하고
   // (현재 간병인 여부는 요구하지 않음 — 조회 전용 화면), 간병종료된 사례도
   // 기존 기록은 계속 조회 가능하도록 case 상태는 확인하지 않는다.
-  let auth;
+  let auth = null;
+  let adminSupabase = null;
 
   try {
     auth = await requireCaseMemberSession(id);
@@ -32,16 +34,26 @@ export default async function CaseCareLogsPage({
       throw authError;
     }
 
-    if (authError.status === 401) {
-      redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}/care-logs`)}`);
+    // 관리자는 사례에 간병인으로 연결되어 있지 않아 위 검증을 통과할 수
+    // 없다. 관리자 화면에서 넘어온 경우까지 간병인 휴대폰 인증을 요구하면
+    // 볼 수 있는 일지가 하나도 없게 되므로, 관리자 세션이면 조회를
+    // 허용한다. 이 화면은 조회 전용이라 노출 범위가 늘어나지 않는다.
+    const adminViewer = await getAdminViewerSession();
+
+    if (!adminViewer) {
+      if (authError.status === 401) {
+        redirect(`/caregiver-login?next=${encodeURIComponent(`/cases/${id}/care-logs`)}`);
+      }
+
+      // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
+      // 경우에도 환자 정보는 노출하지 않는다.
+      return <main className="p-8">{authError.message}</main>;
     }
 
-    // 403(권한 없음)과 404(사례 없음)를 각각 다른 안내로 보여주되, 어느
-    // 경우에도 환자 정보는 노출하지 않는다.
-    return <main className="p-8">{authError.message}</main>;
+    adminSupabase = adminViewer.supabase;
   }
 
-  const { supabase } = auth;
+  const supabase = auth?.supabase ?? adminSupabase!;
 
   const { data: caseData, error: caseError } = await supabase
     .from("cases")
