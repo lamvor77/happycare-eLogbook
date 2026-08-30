@@ -247,25 +247,29 @@ export default async function AdminCasePrintPage({
             특이사항이 인쇄물에서 사라졌다. 증빙 문서에서 서명과 특이사항이
             빠지면 안 되므로, 인쇄할 때만 최소 폭을 풀고(print:min-w-0)
             글자·여백을 줄여 14개 컬럼을 페이지 안에 담는다. 화면 레이아웃은
-            그대로다. */}
+            그대로다.
+
+            글자 크기는 팩스 전송을 염두에 두고 정한다 — 팩스는 해상도가
+            낮아 너무 작은 글자가 뭉개진다. 대신 좌우 여백을 줄여 폭 예산을
+            맞춘다. 세로 여백은 줄이지 않는다(행 구분이 흐려진다). */}
         <div className="overflow-x-auto print:overflow-visible">
-          <table className="w-full min-w-[1200px] print:min-w-0 border-collapse border text-xs print:text-[8px]">
+          <table className="w-full min-w-[1200px] print:min-w-0 border-collapse border text-xs print:text-[10px]">
             <thead>
               <tr>
-                <th className="border p-2 print:p-1">간병일자</th>
-                <th className="border p-2 print:p-1">작성일시</th>
-                <th className="border p-2 print:p-1">작성자</th>
-                <th className="border p-2 print:p-1">관계</th>
-                <th className="border p-2 print:p-1">식사</th>
-                <th className="border p-2 print:p-1">이동</th>
-                <th className="border p-2 print:p-1">배설</th>
-                <th className="border p-2 print:p-1">위생</th>
-                <th className="border p-2 print:p-1">체위</th>
-                <th className="border p-2 print:p-1">위치 확인</th>
-                <th className="border p-2 print:p-1">위치 확인 시간</th>
-                <th className="border p-2 print:p-1">미기록 사유</th>
-                <th className="border p-2 print:p-1">전자서명</th>
-                <th className="border p-2 print:p-1">특이사항</th>
+                <th className="border p-2 print:px-0.5 print:py-1">간병일자</th>
+                <th className="border p-2 print:px-0.5 print:py-1">작성일시</th>
+                <th className="border p-2 print:px-0.5 print:py-1">작성자</th>
+                <th className="border p-2 print:px-0.5 print:py-1">관계</th>
+                <th className="border p-2 print:px-0.5 print:py-1">식사</th>
+                <th className="border p-2 print:px-0.5 print:py-1">이동</th>
+                <th className="border p-2 print:px-0.5 print:py-1">배설</th>
+                <th className="border p-2 print:px-0.5 print:py-1">위생</th>
+                <th className="border p-2 print:px-0.5 print:py-1">체위</th>
+                <th className="border p-2 print:px-0.5 print:py-1">위치 확인</th>
+                <th className="border p-2 print:px-0.5 print:py-1">위치 확인 시간</th>
+                <th className="border p-2 print:px-0.5 print:py-1">미기록 사유</th>
+                <th className="border p-2 print:px-0.5 print:py-1">전자서명</th>
+                <th className="border p-2 print:px-0.5 print:py-1">특이사항</th>
               </tr>
             </thead>
 
@@ -277,39 +281,39 @@ export default async function AdminCasePrintPage({
 
                   return (
                     <tr key={log.log_id}>
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.care_date || "-"}
                       </td>
 
-                      <td className="border p-2 print:p-1">
+                      <td className="border p-2 print:px-0.5 print:py-1">
                         {formatKstDateTime(log.created_at)}
                       </td>
 
-                      <td className="border p-2 print:p-1">
+                      <td className="border p-2 print:px-0.5 print:py-1">
                         {log.writer_name || log.signature_name || "-"}
                       </td>
 
-                      <td className="border p-2 print:p-1">
+                      <td className="border p-2 print:px-0.5 print:py-1">
                         {log.relationship || "-"}
                       </td>
 
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.meal_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.move_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.toilet_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.hygiene_assist ? "O" : "X"}
                       </td>
 
-                      <td className="border p-2 print:p-1 text-center">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center">
                         {log.position_change ? "O" : "X"}
                       </td>
 
@@ -317,7 +321,7 @@ export default async function AdminCasePrintPage({
                           부족하다 — 실제 측정 좌표를 함께 싣는다. 컬럼을
                           늘리지 않고 같은 칸에 쌓아 표 폭에 영향을 주지
                           않는다. 주소로 바꾸려면 외부 지오코딩이 필요하다. */}
-                      <td className="border p-2 print:p-1 text-center break-words">
+                      <td className="border p-2 print:px-0.5 print:py-1 text-center break-words">
                         {locationChecked ? (
                           <>
                             확인 완료
@@ -332,11 +336,11 @@ export default async function AdminCasePrintPage({
                         )}
                       </td>
 
-                      <td className="border p-2 print:p-1">
+                      <td className="border p-2 print:px-0.5 print:py-1">
                         {formatKstDateTime(log.location_checked_at)}
                       </td>
 
-                      <td className="border p-2 print:p-1 break-words">
+                      <td className="border p-2 print:px-0.5 print:py-1 break-words">
                         {locationChecked
                           ? "-"
                           : getLocationFailureLabel(
@@ -344,13 +348,13 @@ export default async function AdminCasePrintPage({
                             )}
                       </td>
 
-                      <td className="border p-2 print:p-1">
+                      <td className="border p-2 print:px-0.5 print:py-1">
                         {log.signature_name ||
                           log.writer_name ||
                           "-"}
                       </td>
 
-                      <td className="border p-2 print:p-1 break-words">
+                      <td className="border p-2 print:px-0.5 print:py-1 break-words">
                         {log.memo || "-"}
                       </td>
                     </tr>
