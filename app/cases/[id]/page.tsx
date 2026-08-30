@@ -8,6 +8,7 @@ import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
 import CaseHistory from "./CaseHistory";
 import type { CaseCaregiver, CareLog } from "@/types/domain";
+import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 
 export default async function CaseDetailPage({
   params,
@@ -82,6 +83,32 @@ export default async function CaseDetailPage({
     .eq("case_id", id)
     .is("deleted_at", null)
     .order("care_date", { ascending: false });
+
+  // 최근 간병일지에 표시할 첨부 사진. 아래에서 3건만 보여주므로 그 3건에
+  // 대해서만 signed URL을 발급한다(버킷이 private이라 공개 URL이 없다).
+  const photoUrlByLogId = new Map<string, string>();
+  const visibleLogIds = (careLogs || [])
+    .slice(0, 3)
+    .map((log: CareLog) => log.log_id);
+
+  if (visibleLogIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("care_log_photos")
+      .select("log_id, file_url")
+      .in("log_id", visibleLogIds);
+
+    for (const photo of photos || []) {
+      if (!photo.file_url) continue;
+
+      const { data: signed } = await supabase.storage
+        .from(CARE_LOG_PHOTO_BUCKET)
+        .createSignedUrl(photo.file_url, 60 * 30);
+
+      if (signed?.signedUrl) {
+        photoUrlByLogId.set(photo.log_id, signed.signedUrl);
+      }
+    }
+  }
 
   // CaseHistory는 이 페이지가 이미 통과한 requireCaseMemberSession() 권한
   // 검증과 service_role 클라이언트를 그대로 재사용한다 — 별도로 다시
@@ -221,6 +248,18 @@ export default async function CaseDetailPage({
                 <p>작성자: {log.writer_name || log.signature_name || "-"}</p>
                 <p>관계: {log.relationship || "-"}</p>
                 <p>특이사항: {log.memo || "-"}</p>
+
+                {photoUrlByLogId.has(log.log_id) && (
+                  <div className="mt-2">
+                    {/* Supabase signed URL이라 next/image 최적화 대상이 아니다. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrlByLogId.get(log.log_id)}
+                      alt="간병일지 첨부 사진"
+                      className="w-full max-h-56 object-contain rounded border"
+                    />
+                  </div>
+                )}
               </div>
             ))}
 
