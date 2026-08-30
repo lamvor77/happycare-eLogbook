@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { sendSms, SolapiError } from "@/lib/solapi";
+import { getKstDayStart } from "@/lib/kst";
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5분 만료
 const RESEND_COOLDOWN_MS = 60 * 1000; // 동일 번호 60초 재발송 제한
@@ -76,8 +77,10 @@ export async function sendOtp(phoneNormalized: string): Promise<void> {
     }
   }
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // 서버가 UTC로 돌기 때문에 setHours(0,0,0,0)은 한국시각 오전 9시를
+  // 하루의 시작으로 잡는다. "오늘 인증 요청 횟수"는 사용자가 체감하는
+  // 하루(한국시각 자정 기준)와 같아야 한다.
+  const todayStart = getKstDayStart();
 
   const { count } = await supabase
     .from("caregiver_otp_codes")

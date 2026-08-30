@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
+import { getCareLogToday } from "@/lib/care-log-date";
 
 type LocationStatus = "checked" | "unavailable";
 
@@ -96,7 +97,7 @@ export async function POST(
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getCareLogToday();
 
   // 관리자가 오늘 일지를 삭제(soft delete)했다면 다시 작성할 수 있어야
   // 하므로, 삭제된 행은 중복 작성 판정에서 제외한다.

@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import PrintButton from "./PrintButton";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 import type { CareLog } from "@/types/domain";
+import { formatKstDateTime, getKstToday } from "@/lib/kst";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") {
@@ -132,7 +133,7 @@ export default async function AdminCasePrintPage({
   const needsCaregiverLink =
     caseData.source_type === "google_form" && (activeCaregiverCount || 0) === 0;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getKstToday();
 
   const documentNo = `HG-${
     caseData.case_no || caseData.case_id.slice(0, 8)
@@ -271,11 +272,7 @@ export default async function AdminCasePrintPage({
                       </td>
 
                       <td className="border p-2">
-                        {log.created_at
-                          ? new Date(log.created_at).toLocaleString(
-                              "ko-KR"
-                            )
-                          : "-"}
+                        {formatKstDateTime(log.created_at)}
                       </td>
 
                       <td className="border p-2">
@@ -311,11 +308,7 @@ export default async function AdminCasePrintPage({
                       </td>
 
                       <td className="border p-2">
-                        {log.location_checked_at
-                          ? new Date(
-                              log.location_checked_at
-                            ).toLocaleString("ko-KR")
-                          : "-"}
+                        {formatKstDateTime(log.location_checked_at)}
                       </td>
 
                       <td className="border p-2">

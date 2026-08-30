@@ -3,6 +3,7 @@ import LogoutButton from "./LogoutButton";
 import RecentCaseTestResetButton from "./RecentCaseTestResetButton";
 import type { CaseRecord, CareLog } from "@/types/domain";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
+import { getKstToday } from "@/lib/kst";
 
 function getSourceLabel(sourceType?: string | null) {
   if (sourceType === "google_form") return "구글폼";
@@ -35,7 +36,7 @@ export default async function AdminPage() {
     .from("caregivers")
     .select("*", { count: "exact", head: true });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getKstToday();
 
   const { count: todayCareLogCount } = await supabase
     .from("care_logs")

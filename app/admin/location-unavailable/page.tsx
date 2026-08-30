@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import type { CareLog } from "@/types/domain";
+import { formatKstDateTime } from "@/lib/kst";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") {
@@ -153,11 +154,7 @@ export default async function LocationUnavailablePage() {
 
                   <p>
                     작성일시:{" "}
-                    {log.created_at
-                      ? new Date(log.created_at).toLocaleString(
-                          "ko-KR"
-                        )
-                      : "-"}
+                    {formatKstDateTime(log.created_at)}
                   </p>
 
                   <p>
@@ -186,11 +183,7 @@ export default async function LocationUnavailablePage() {
 
                   <p className="mt-1">
                     위치 확인 시도시간:{" "}
-                    {log.location_checked_at
-                      ? new Date(
-                          log.location_checked_at
-                        ).toLocaleString("ko-KR")
-                      : "-"}
+                    {formatKstDateTime(log.location_checked_at)}
                   </p>
                 </div>
 

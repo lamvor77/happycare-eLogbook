@@ -3,6 +3,7 @@ import DeleteCareLogButton from "./DeleteCareLogButton";
 import RestoreCareLogButton from "./RestoreCareLogButton";
 import type { CareLog } from "@/types/domain";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
+import { formatKstDateTime } from "@/lib/kst";
 
 export default async function AdminCaseCareLogsPage({
   params,
@@ -164,9 +165,7 @@ export default async function AdminCaseCareLogsPage({
                       </p>
                       <p className="text-sm text-gray-700">
                         작성시간:{" "}
-                        {log.created_at
-                          ? new Date(log.created_at).toLocaleString("ko-KR")
-                          : "-"}
+                        {formatKstDateTime(log.created_at)}
                       </p>
                     </div>
 
@@ -212,9 +211,7 @@ export default async function AdminCaseCareLogsPage({
                     <div className="mt-3 border-t pt-2 text-sm text-red-700">
                       <p>
                         삭제일시:{" "}
-                        {log.deleted_at
-                          ? new Date(log.deleted_at).toLocaleString("ko-KR")
-                          : "-"}
+                        {formatKstDateTime(log.deleted_at)}
                       </p>
                       <p>삭제 사유: {log.delete_reason || "-"}</p>
                     </div>

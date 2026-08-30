@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
 import { revokeAllSessionsForCaregiver } from "@/lib/caregiver-session";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
+import { getKstToday } from "@/lib/kst";
 
 export async function POST(
   request: Request,
@@ -39,7 +40,7 @@ export async function POST(
     return NextResponse.json({ error: "이미 종료된 사례입니다." }, { status: 409 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getKstToday();
 
   const { error: updateError } = await supabase
     .from("cases")

@@ -1,4 +1,5 @@
 import type { CaseHistoryEntry } from "@/types/domain";
+import { formatKstDateTime } from "@/lib/kst";
 
 /**
  * 순수 표시 전용 컴포넌트다. case_history 조회는 부모(app/cases/[id]/page.tsx)가
@@ -39,7 +40,7 @@ export default function CaseHistory({
 
               <p className="text-xs text-gray-700">
                 {item.actor ? `수행자: ${item.actor} · ` : ""}
-                {new Date(item.created_at).toLocaleString("ko-KR")}
+                {formatKstDateTime(item.created_at)}
               </p>
             </div>
           ))}

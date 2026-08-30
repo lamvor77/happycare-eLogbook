@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import type { Hospital } from "@/types/domain";
+import { getKstToday } from "@/lib/kst";
 
 interface HospitalWithCases extends Hospital {
   cases?: {
@@ -31,7 +32,7 @@ export default async function AdminHospitalsPage() {
     return <main className="p-8">오류: {error.message}</main>;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getKstToday();
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
