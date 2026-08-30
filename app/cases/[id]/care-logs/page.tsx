@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { CaregiverAuthError, requireCaseMemberSession } from "@/lib/caregiver-auth";
 import type { CareLog, Hospital } from "@/types/domain";
+import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
@@ -84,6 +85,31 @@ export default async function CaseCareLogsPage({
     .is("deleted_at", null)
     .order("care_date", { ascending: false })
     .order("created_at", { ascending: false });
+
+  // 첨부 사진. 버킷이 private이라 공개 URL이 없고, 화면을 그릴 때마다 짧은
+  // 유효기간의 signed URL을 발급한다. care_log_photos.file_url에는 URL이
+  // 아니라 Storage 객체 경로가 들어 있다(lib/care-log-photo.ts 참고).
+  const photoUrlByLogId = new Map<string, string>();
+  const logIds = (logs || []).map((log: CareLog) => log.log_id);
+
+  if (logIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("care_log_photos")
+      .select("log_id, file_url")
+      .in("log_id", logIds);
+
+    for (const photo of photos || []) {
+      if (!photo.file_url) continue;
+
+      const { data: signed } = await supabase.storage
+        .from(CARE_LOG_PHOTO_BUCKET)
+        .createSignedUrl(photo.file_url, 60 * 30);
+
+      if (signed?.signedUrl) {
+        photoUrlByLogId.set(photo.log_id, signed.signedUrl);
+      }
+    }
+  }
 
   if (error) {
     console.error(
@@ -229,6 +255,20 @@ export default async function CaseCareLogsPage({
                       "-"}
                   </p>
                 </div>
+
+                {photoUrlByLogId.has(log.log_id) && (
+                  <div className="border-t mt-4 pt-3">
+                    <p className="text-sm mb-2">첨부 사진</p>
+
+                    {/* Supabase signed URL이라 next/image 최적화 대상이 아니다. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrlByLogId.get(log.log_id)}
+                      alt="간병일지 첨부 사진"
+                      className="w-full max-h-72 object-contain rounded border"
+                    />
+                  </div>
+                )}
               </div>
             );
           })

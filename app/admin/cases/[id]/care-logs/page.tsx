@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import DeleteCareLogButton from "./DeleteCareLogButton";
 import RestoreCareLogButton from "./RestoreCareLogButton";
 import type { CareLog } from "@/types/domain";
+import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 
 export default async function AdminCaseCareLogsPage({
   params,
@@ -41,6 +42,29 @@ export default async function AdminCaseCareLogsPage({
     .order("created_at", { ascending: false });
 
   console.error(logsError);
+
+  // 첨부 사진. private 버킷이라 화면을 그릴 때마다 짧은 signed URL을 발급한다.
+  const photoUrlByLogId = new Map<string, string>();
+  const logIds = (logs || []).map((log: { log_id: string }) => log.log_id);
+
+  if (logIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("care_log_photos")
+      .select("log_id, file_url")
+      .in("log_id", logIds);
+
+    for (const photo of photos || []) {
+      if (!photo.file_url) continue;
+
+      const { data: signed } = await supabase.storage
+        .from(CARE_LOG_PHOTO_BUCKET)
+        .createSignedUrl(photo.file_url, 60 * 30);
+
+      if (signed?.signedUrl) {
+        photoUrlByLogId.set(photo.log_id, signed.signedUrl);
+      }
+    }
+  }
 
   if (logsError) {
     console.error(
@@ -168,6 +192,20 @@ export default async function AdminCaseCareLogsPage({
 
                   {log.memo && (
                     <p className="text-sm text-gray-700 mt-2">특이사항: {log.memo}</p>
+                  )}
+
+                  {photoUrlByLogId.has(log.log_id) && (
+                    <div className="mt-3 border-t pt-2">
+                      <p className="text-sm text-gray-700 mb-2">첨부 사진</p>
+
+                      {/* Supabase signed URL이라 next/image 최적화 대상이 아니다. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photoUrlByLogId.get(log.log_id)}
+                        alt="간병일지 첨부 사진"
+                        className="w-full max-h-72 object-contain rounded border"
+                      />
+                    </div>
                   )}
 
                   {isDeleted && (
