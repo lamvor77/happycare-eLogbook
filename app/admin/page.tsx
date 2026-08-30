@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import LogoutButton from "./LogoutButton";
 import RecentCaseTestResetButton from "./RecentCaseTestResetButton";
 import type { CaseRecord, CareLog } from "@/types/domain";
+import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 
 function getSourceLabel(sourceType?: string | null) {
   if (sourceType === "google_form") return "구글폼";
@@ -95,6 +96,31 @@ export default async function AdminPage() {
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(10);
+
+  // 최근 일지에 첨부된 사진. private 버킷이라 공개 URL이 없어, 화면을 그릴
+  // 때 짧은 유효기간의 signed URL을 발급한다. 여기 표시되는 10건에 대해서만
+  // 조회한다.
+  const photoUrlByLogId = new Map<string, string>();
+  const recentLogIds = (recentLogs || []).map((log: CareLog) => log.log_id);
+
+  if (recentLogIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("care_log_photos")
+      .select("log_id, file_url")
+      .in("log_id", recentLogIds);
+
+    for (const photo of photos || []) {
+      if (!photo.file_url) continue;
+
+      const { data: signed } = await supabase.storage
+        .from(CARE_LOG_PHOTO_BUCKET)
+        .createSignedUrl(photo.file_url, 60 * 30);
+
+      if (signed?.signedUrl) {
+        photoUrlByLogId.set(photo.log_id, signed.signedUrl);
+      }
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -343,6 +369,22 @@ export default async function AdminPage() {
                             </p>
                           )}
                       </div>
+
+                      {photoUrlByLogId.has(log.log_id) && (
+                        <div className="mt-3">
+                          <p className="text-sm text-gray-700 mb-1">
+                            첨부 사진
+                          </p>
+
+                          {/* Supabase signed URL이라 next/image 최적화 대상이 아니다. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={photoUrlByLogId.get(log.log_id)}
+                            alt="간병일지 첨부 사진"
+                            className="w-full max-h-56 object-contain rounded border"
+                          />
+                        </div>
+                      )}
 
                       <a
                         href={`/cases/${log.case_id}`}
