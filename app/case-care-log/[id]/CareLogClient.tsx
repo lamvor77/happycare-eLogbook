@@ -1,6 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  ALLOWED_PHOTO_MIME_TYPES,
+  MAX_PHOTO_BYTES,
+  PHOTO_JPEG_QUALITY,
+  PHOTO_MAX_DIMENSION,
+  isAllowedPhotoMimeType,
+} from "@/lib/care-log-photo";
 
 /**
  * idle = 위치 확인을 아직 시작하지 않은 상태.
@@ -12,6 +19,47 @@ type LocationStatus = "idle" | "checking" | "checked" | "unavailable";
 
 /** 위치정보 사용에 동의하지 않은 채 저장할 때 남기는 미기록 사유. */
 const CONSENT_DECLINED_REASON = "consent_declined";
+
+/**
+ * 업로드 전에 사진을 줄인다. 요즘 폰 원본은 3~8MB라 그대로 올리면 실패가
+ * 잦고, canvas로 다시 그려 내보내면 EXIF(촬영 위치 등)가 함께 사라져
+ * 개인정보 측면에서도 유리하다. 압축에 실패하면 원본을 그대로 쓴다 —
+ * 서버가 형식/용량을 다시 검증하므로 안전하다.
+ */
+async function compressPhoto(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(
+      1,
+      PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return file;
+    }
+
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY)
+    );
+
+    if (!blob) {
+      return file;
+    }
+
+    return new File([blob], "photo.jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
 
 interface CaregiverStatus {
   loggedIn: boolean;
@@ -54,6 +102,12 @@ export default function CareLogClient({
   const [memo, setMemo] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 첨부 사진(선택). 일지 저장 후 그 log_id로 업로드하므로, 저장 전까지는
+  // 화면에만 들고 있는다.
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState("");
 
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
@@ -201,6 +255,60 @@ export default function CareLogClient({
     );
   }
 
+  function handlePhotoSelect(file: File | null) {
+    setPhotoError("");
+
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+    }
+
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+
+    // 화면에서 먼저 걸러 사용자에게 즉시 알려준다. 실제 방어는 서버가 한다.
+    if (!isAllowedPhotoMimeType(file.type)) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setPhotoError("JPG, PNG, WebP 형식의 사진만 첨부할 수 있습니다.");
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setPhotoError("사진 용량이 너무 큽니다. 다른 사진을 선택해주세요.");
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  /**
+   * 일지 저장이 끝난 뒤에 사진을 올린다. 업로드가 실패해도 일지 자체는
+   * 이미 저장된 상태이므로 되돌리지 않는다 — 사진은 선택사항이고, 본문을
+   * 잃는 것이 더 큰 손실이다. 실패 사실만 사용자에게 알린다.
+   */
+  async function uploadPhoto(logId: string): Promise<boolean> {
+    if (!photoFile) {
+      return true;
+    }
+
+    const compressed = await compressPhoto(photoFile);
+    const form = new FormData();
+    form.append("photo", compressed);
+
+    const response = await fetch(
+      `/api/cases/${caseId}/care-logs/${logId}/photos`,
+      { method: "POST", body: form }
+    );
+
+    return response.ok;
+  }
+
   async function handleSave() {
     setMessage("");
 
@@ -258,7 +366,18 @@ export default function CareLogClient({
       return;
     }
 
-    setMessage("간병일지가 저장되었습니다. 작성기록 화면으로 이동합니다.");
+    let photoUploaded = true;
+
+    if (photoFile && body?.log_id) {
+      setMessage("사진을 첨부하는 중입니다...");
+      photoUploaded = await uploadPhoto(body.log_id);
+    }
+
+    setMessage(
+      photoUploaded
+        ? "간병일지가 저장되었습니다. 작성기록 화면으로 이동합니다."
+        : "간병일지는 저장됐지만 사진 첨부에 실패했습니다. 작성기록 화면에서 다시 첨부할 수 있습니다."
+    );
 
     setTimeout(() => {
       window.location.href = `/cases/${caseId}/care-logs`;
@@ -339,6 +458,7 @@ export default function CareLogClient({
             onChange={(event) => setMemo(event.target.value)}
           />
         </div>
+
 
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-2">위치 확인</h2>
@@ -430,6 +550,53 @@ export default function CareLogClient({
               ? "위치 확인 중..."
               : "현재 위치 다시 확인"}
           </button>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-5">
+          <h2 className="font-bold mb-2">사진 첨부 (선택)</h2>
+
+          <p className="mb-4 text-sm text-gray-600">
+            간병 현장 사진을 1장 첨부할 수 있습니다. 첨부하지 않아도 일지는
+            저장됩니다.
+          </p>
+
+          {/* capture 속성을 넣지 않는다 — 넣으면 카메라가 곧바로 열려
+              앨범에서 고르는 길이 막힌다. 지정하지 않으면 모바일에서
+              "촬영 / 앨범" 선택지가 자연스럽게 뜬다. */}
+          <input
+            type="file"
+            accept={ALLOWED_PHOTO_MIME_TYPES.join(",")}
+            disabled={!canWrite || saving}
+            onChange={(event) =>
+              handlePhotoSelect(event.target.files?.[0] ?? null)
+            }
+            className="w-full text-sm disabled:opacity-50"
+          />
+
+          {photoError && (
+            <p className="mt-2 text-sm text-red-600">{photoError}</p>
+          )}
+
+          {photoPreview && (
+            <div className="mt-3">
+              {/* 로컬 미리보기(blob URL)라 next/image 최적화 대상이 아니다. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoPreview}
+                alt="첨부할 사진 미리보기"
+                className="w-full max-h-64 object-contain rounded border"
+              />
+
+              <button
+                type="button"
+                onClick={() => handlePhotoSelect(null)}
+                disabled={saving}
+                className="mt-2 w-full border border-gray-400 text-gray-700 p-2 rounded text-sm disabled:opacity-50"
+              >
+                사진 선택 취소
+              </button>
+            </div>
+          )}
         </div>
 
         {canWrite ? (

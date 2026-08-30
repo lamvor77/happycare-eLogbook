@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import PrintButton from "./PrintButton";
+import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
 import type { CareLog } from "@/types/domain";
 
 function getLocationFailureLabel(reason?: string | null) {
@@ -69,6 +70,32 @@ export default async function AdminCasePrintPage({
     .is("deleted_at", null)
     .order("care_date", { ascending: true })
     .order("created_at", { ascending: true });
+
+  // 첨부 사진. 버킷이 private이라 공개 URL이 없고, 출력 시점에 짧은 유효기간의
+  // signed URL을 발급해 <img>로 그린다. care_log_photos.file_url에는 URL이
+  // 아니라 Storage 객체 경로가 들어 있다(lib/care-log-photo.ts 참고).
+  const logIds = (logs || []).map((log: { log_id: string }) => log.log_id);
+
+  const photoUrlByLogId = new Map<string, string>();
+
+  if (logIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("care_log_photos")
+      .select("log_id, file_url")
+      .in("log_id", logIds);
+
+    for (const photo of photos || []) {
+      if (!photo.file_url) continue;
+
+      const { data: signed } = await supabase.storage
+        .from(CARE_LOG_PHOTO_BUCKET)
+        .createSignedUrl(photo.file_url, 60 * 30);
+
+      if (signed?.signedUrl) {
+        photoUrlByLogId.set(photo.log_id, signed.signedUrl);
+      }
+    }
+  }
 
   if (logsError) {
     console.error(
@@ -341,6 +368,41 @@ export default async function AdminCasePrintPage({
           문서번호: {documentNo}
         </p>
       </section>
+
+      {/* 첨부 사진 부록 — 사진이 하나도 없으면 이 영역 자체를 만들지 않아
+          빈 페이지가 생기지 않는다. 본문 표는 그대로 두고 문서 말미에만
+          덧붙이므로 기존 출력 레이아웃이 바뀌지 않는다. */}
+      {photoUrlByLogId.size > 0 && (
+        <section className="mt-8 break-before-page">
+          <h2 className="font-bold mb-3">첨부 사진</h2>
+
+          {/* A4 한 가로줄에 2장. 각 사진은 페이지 경계에서 잘리지 않도록
+              break-inside-avoid를 준다. 증빙 사진이므로 잘라내는 cover 대신
+              전체가 보이는 contain을 쓴다. */}
+          <div className="grid grid-cols-2 gap-4">
+            {(logs || [])
+              .filter((log: CareLog) => photoUrlByLogId.has(log.log_id))
+              .map((log: CareLog) => (
+                <figure
+                  key={log.log_id}
+                  className="break-inside-avoid border rounded p-2"
+                >
+                  {/* Supabase signed URL이라 next/image 최적화 대상이 아니다. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoUrlByLogId.get(log.log_id)}
+                    alt="간병일지 첨부 사진"
+                    className="w-full h-64 object-contain"
+                  />
+
+                  <figcaption className="mt-2 text-center text-xs text-gray-700">
+                    {log.care_date} · {log.writer_name || "-"}
+                  </figcaption>
+                </figure>
+              ))}
+          </div>
+        </section>
+      )}
 
       <div className="mt-6 print:hidden">
         <PrintButton />
