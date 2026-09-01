@@ -420,6 +420,50 @@ service_role 클라이언트로 조회한다 — RLS는 "꺼진 것"이 아니�
 대해서는 애초에 통과 대상이 아닌" 상태다. 반대로 관리자 경로는 여전히
 RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 
+중요한 것은 이 무력화가 **fail-open이 아니라 fail-closed**라는 점이다.
+`auth.uid()`가 null이면 `current_caregiver_id()`도 null이 되어 정책 조건이
+거짓이 되므로, anon 키로 직접 붙어도 행이 하나도 보이지 않는다(2026-09-01
+운영 확인). 즉 이 정책들은 구멍이 아니라 "이 앱에서는 아무것도 하지 않는
+코드"다. 다만 그렇기 때문에 **"RLS가 막아주겠지"라고 가정하고 서버 검증을
+빠뜨리면 곧바로 사고가 된다.** 간병인 경로의 방어선은 오직
+`lib/caregiver-auth.ts` + 각 라우트의 검증이다.
+
+### 4.4 보안 모델 요약 (2026-09-01 감사 기준)
+
+```
+간병인:  브라우저 → Next.js 서버 라우트 → 세션 쿠키 검증(해시 대조)
+                 → service_role로 DB/Storage 접근
+         (브라우저가 DB/Storage를 직접 호출하는 코드 0건)
+
+관리자:  브라우저 → Supabase Auth(getUser로 검증)
+                 → ADMIN_EMAILS 확인 → 관리자 세션 클라이언트
+                 → RLS의 is_admin() 통과
+```
+
+2026-09-01 감사에서 확인·정리한 것:
+
+- 관리자 페이지/API 전 경로에 `requireAdmin()`/`requireAdminApi()`가 있고
+  `proxy.ts`가 `/admin/*`을 한 번 더 막는다. 비로그인 조회 경로는 없다.
+- 간병인 API는 전부 `isSameOriginRequest()` + 세션 검증을 거친 뒤에만
+  service_role 클라이언트를 만든다. 클라이언트가 보낸 `caregiver_id`를
+  신뢰하는 코드는 없다.
+- 구형 v1 RPC의 브라우저 실행 권한과, 브라우저 역할의 TRUNCATE/TRIGGER/
+  REFERENCES 권한, 레거시 테이블(`patients` 등, RLS 꺼짐 + 0행) 접근
+  권한을 회수한다 —
+  `20260901110000_revoke_legacy_rpc_and_table_privileges.sql`.
+- `hospitals.qr_token`은 anon이 직접 읽을 수 있어 활성 병원 전체의 QR
+  토큰을 열거할 수 있었다. 비로그인 조회를 `get_public_hospital_v2()`
+  (SECURITY DEFINER, 토큰을 반환하지 않음)로 옮기고 컬럼 권한을 회수한다
+  — `20260901090000`, `20260901100000`.
+
+아직 정리하지 않은 것(후속):
+
+- 간병인용 inert RLS 정책 자체는 남겨 두었다. 정책 삭제는 되돌리기
+  어려우므로 권한 회수(1차)와 분리해 별도 단계에서 다룬다.
+- `case_history_insert` 정책에 `is_admin()` 조건이 없어, 관리자가 간병일지를
+  삭제/복원할 때 남기려는 이력이 실제로는 기록되지 않는다(라우트가
+  best-effort로 처리해 사용자에게는 보이지 않는다).
+
 ## 5. 등록 경로 통합 (QR 최초 등록 vs Google Form)
 
 두 경로 모두 최종적으로 `cases` 테이블 한 곳에 모인다.
@@ -512,13 +556,15 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
   포함되지 않았다 — 여전히 "주민등록번호 앞 7자리(선택)"만 받고
   `join_case_v2`를 그대로 호출한다(`docs/registration-field-mapping.md`
   참고 항목).
-- `care_log_photos`는 스키마 존재만 확인되고 실제 업로드 코드 경로가
-  없다(3.6절).
 - 관리자의 환자 PDF 열람에 대한 접근 로그가 없다(`docs/privacy-data-policy.md`
   11절, 후속 과제로 명시됨).
 - `register_case`/`join_case`/`set_current_caregiver`(v1), `register_case_v2`
   함수가 DB에 남아있다 — 신규 QR 등록은 `register_case_v3`만 호출하지만,
-  실수로 v1/v2를 다시 참조하지 않도록 주의할 것(6절).
+  실수로 v1/v2를 다시 참조하지 않도록 주의할 것(6절). 2026-09-01 감사에서
+  v1 3개에 `anon`/`authenticated` EXECUTE 권한이 남아 있는 것이 확인됐고
+  (`join_case` v1은 휴대폰 OTP 없이 family_code만으로 사례에 참여할 수 있는
+  구형 경로다), `20260901090000_revoke_legacy_rpc_and_table_privileges.sql`이
+  함수를 남긴 채 브라우저 역할의 실행 권한만 회수한다.
 - `admission_status`(입원 예정/입원 당일/입원 중) 항목은 QR 등록 화면에서
   수집하지만 대응하는 DB 컬럼이 없어 서버가 값을 버린다(3.2절 `cases.status`
   와는 의미가 다름, `docs/registration-field-mapping.md` 참고).

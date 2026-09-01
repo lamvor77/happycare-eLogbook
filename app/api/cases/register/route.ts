@@ -225,13 +225,14 @@ export async function POST(request: Request) {
     // 이 지점 이후로는 digits13(원문)을 더 이상 참조하지 않는다.
   }
 
-  let hospitalQuery = supabase.from("hospitals").select("hospital_id, status");
+  // hospitals를 직접 조회하지 않고 SECURITY DEFINER 함수를 쓴다(anon에게
+  // qr_token 컬럼 SELECT 권한을 주지 않기 위해서다 — app/log/page.tsx 참고).
+  const { data: hospitalRows } = await supabase.rpc("get_public_hospital_v2", {
+    p_qr_token: body.hospital_token ?? null,
+    p_hospital_code: body.hospital_token ? null : (body.hospital_code as string),
+  });
 
-  hospitalQuery = body.hospital_token
-    ? hospitalQuery.eq("qr_token", body.hospital_token)
-    : hospitalQuery.eq("hospital_code", body.hospital_code as string);
-
-  const { data: hospital } = await hospitalQuery.maybeSingle();
+  const hospital = hospitalRows?.[0] ?? null;
 
   if (!hospital || hospital.status !== "active") {
     return NextResponse.json({ error: "병원 정보를 찾을 수 없습니다." }, { status: 400 });

@@ -13,13 +13,17 @@ export default async function LogPage({
 
   // 개인정보 최소화: 이 화면은 로그인 없이 접근 가능하므로 병원의
   // 최소 식별 정보만 조회한다. 환자 목록은 이 화면에서 보여주지 않는다.
-  let query = supabase
-    .from("hospitals")
-    .select("hospital_id, hospital_name, hospital_address, status");
+  //
+  // hospitals 테이블을 직접 조회하지 않고 SECURITY DEFINER 함수를 쓴다.
+  // 테이블을 직접 거르려면 anon에게 qr_token 컬럼 SELECT 권한이 있어야
+  // 하는데, 그러면 anon 키로 활성 병원 전체의 QR 토큰을 열거할 수 있다.
+  // 함수 안에서 대조하면 토큰을 아는 사람만 자기 병원 정보를 얻는다.
+  const { data: hospitals } = await supabase.rpc("get_public_hospital_v2", {
+    p_qr_token: q ?? null,
+    p_hospital_code: q ? null : (h as string),
+  });
 
-  query = q ? query.eq("qr_token", q) : query.eq("hospital_code", h as string);
-
-  const { data: hospital } = await query.maybeSingle();
+  const hospital = hospitals?.[0] ?? null;
 
   if (!hospital) {
     return <main className="p-8">등록되지 않은 병원입니다.</main>;
