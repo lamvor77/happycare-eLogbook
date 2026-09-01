@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireActiveCaseMemberSession } from "@/lib/caregiver-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 import { isWithinCareLogEditWindow } from "@/lib/care-log-photo";
@@ -59,7 +59,7 @@ export async function PATCH(
   let auth;
 
   try {
-    auth = await requireCurrentCaregiverSession(caseId);
+    auth = await requireActiveCaseMemberSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -108,7 +108,7 @@ export async function PATCH(
     return NextResponse.json({ error: "삭제된 간병일지입니다." }, { status: 400 });
   }
 
-  // 현재 간병인이라도 남이 쓴 일지를 고칠 수는 없다.
+  // 같은 사례의 구성원이라도 남이 쓴 일지를 고칠 수는 없다.
   if (log.caregiver_id !== auth.caregiver.caregiver_id) {
     return NextResponse.json(
       { error: "본인이 작성한 간병일지만 수정할 수 있습니다." },

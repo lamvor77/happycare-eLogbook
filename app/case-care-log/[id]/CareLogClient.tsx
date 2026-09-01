@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   MAX_PHOTO_BYTES,
   isAllowedPhotoMimeType,
@@ -20,35 +20,30 @@ const CONSENT_DECLINED_REASON = "consent_declined";
 
 interface CaregiverStatus {
   loggedIn: boolean;
-  isCurrent: boolean;
+  /** 이 사례의 활성 구성원인가 — 서버가 판정한 값. 현재 간병인 여부가 아니다. */
+  isActiveMember: boolean;
   caregiverName: string | null;
 }
 
 export default function CareLogClient({
   caseId,
   patientName,
-  currentCaregiverName,
-  currentCaregiverRelationship,
+  writerName,
+  writerRelationship,
   caregiverStatus,
   locationConsent,
-  currentCaregiverChange,
 }: {
   caseId: string;
   patientName: string;
-  currentCaregiverName: string | null;
-  currentCaregiverRelationship: string | null;
+  /** 세션으로 확인된 작성자 본인 — 서버가 이 이름으로 기록한다. */
+  writerName: string | null;
+  writerRelationship: string | null;
   caregiverStatus: CaregiverStatus;
   /**
    * 이 사례에서 이 간병인의 위치정보 동의 상태(case_caregivers 행 값).
    * null이면 아직 한 번도 답하지 않은 것이라 최초 질문을 띄운다.
    */
   locationConsent: boolean | null;
-  /**
-   * "현재 간병인 변경" 영역. 보여줄 조건이 아닐 때는 서버(page.tsx)가
-   * 아무것도 넘기지 않으므로 이 자리에 빈 카드나 제목이 남지 않는다.
-   * 이 컴포넌트는 노출 여부를 스스로 판단하지 않는다.
-   */
-  currentCaregiverChange?: ReactNode;
 }) {
   const [mealAssist, setMealAssist] = useState(false);
   const [moveAssist, setMoveAssist] = useState(false);
@@ -97,7 +92,7 @@ export default function CareLogClient({
     null
   );
 
-  const canWrite = caregiverStatus.loggedIn && caregiverStatus.isCurrent;
+  const canWrite = caregiverStatus.loggedIn && caregiverStatus.isActiveMember;
 
   const checkLocation = useCallback(() => {
     setLocationStatus("checking");
@@ -292,7 +287,7 @@ export default function CareLogClient({
     }
 
     if (!canWrite) {
-      setMessage("현재 간병인으로 로그인한 경우에만 작성할 수 있습니다.");
+      setMessage("이 사례에 등록된 간병인으로 로그인한 경우에만 작성할 수 있습니다.");
       return;
     }
 
@@ -364,14 +359,15 @@ export default function CareLogClient({
           </p>
 
           <p className="text-gray-600">
-            현재 간병인:{" "}
-            {currentCaregiverName} (
-            {currentCaregiverRelationship})
+            작성자:{" "}
+            {writerName} (
+            {writerRelationship})
           </p>
 
           {!canWrite && (
             <div className="mt-4 bg-red-50 text-red-600 p-3 rounded text-sm">
-              현재 간병인으로 로그인한 경우에만 작성할 수 있습니다.
+              이 사례에 등록된 간병인으로 로그인한 경우에만 작성할 수
+              있습니다.
               <br />
 
               <a
@@ -383,10 +379,6 @@ export default function CareLogClient({
             </div>
           )}
         </div>
-
-        {/* 작성을 시작하기 전에 현재 간병인을 확인하고 필요하면 바로 바꿀 수
-            있도록, 환자/현재 간병인을 보여주는 위 카드 바로 다음에 둔다. */}
-        {currentCaregiverChange}
 
         <div className="bg-white rounded-lg shadow p-5">
           <h2 className="font-bold mb-4">간병활동</h2>

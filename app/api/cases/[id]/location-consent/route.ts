@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireActiveCaseMemberSession } from "@/lib/caregiver-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 
@@ -41,7 +41,7 @@ export async function POST(
   let auth;
 
   try {
-    auth = await requireCurrentCaregiverSession(caseId);
+    auth = await requireActiveCaseMemberSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

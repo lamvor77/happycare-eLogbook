@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CaregiverAuthError, requireCurrentCaregiverSession } from "@/lib/caregiver-auth";
+import { CaregiverAuthError, requireActiveCaseMemberSession } from "@/lib/caregiver-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 import {
@@ -21,9 +21,10 @@ import {
  * 것으로 처리한다.
  *
  * *** 권한 ***
- * 간병일지 작성과 같은 조건을 요구한다(로그인 + 이 사례의 현재 간병인 본인
- * + 사례 진행 중). 거기에 더해 "그 일지를 쓴 본인인지"를 다시 확인한다 —
- * 현재 간병인이라도 다른 사람이 쓴 일지의 사진을 건드릴 수는 없다.
+ * 간병일지 작성과 같은 조건을 요구한다(로그인 + 이 사례의 활성 구성원
+ * + 사례 진행 중 — 현재 간병인 여부는 보지 않는다). 거기에 더해 "그
+ * 일지를 쓴 본인인지"를 다시 확인한다 — 같은 사례의 구성원이라도 다른
+ * 사람이 쓴 일지의 사진을 건드릴 수는 없다.
  *
  * *** RLS와 service_role ***
  * care_log_photos에는 UPDATE/DELETE 정책이 없고 anon/authenticated에서
@@ -118,7 +119,7 @@ export async function POST(
   let auth;
 
   try {
-    auth = await requireCurrentCaregiverSession(caseId);
+    auth = await requireActiveCaseMemberSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -227,7 +228,7 @@ export async function DELETE(
   let auth;
 
   try {
-    auth = await requireCurrentCaregiverSession(caseId);
+    auth = await requireActiveCaseMemberSession(caseId);
   } catch (error) {
     if (error instanceof CaregiverAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

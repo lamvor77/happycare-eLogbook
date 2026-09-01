@@ -159,22 +159,21 @@ export async function requireCaseMemberSession(caseId: string) {
 }
 
 /**
- * caseId에 대해 로그인한 caregiver가 "현재 간병인(is_current_caregiver=true,
- * status=활성)"이고, 해당 사례가 아직 "입원중"인지 서버에서 검증한다.
- * 간병종료된 사례는 세션이 유효해도 새 일지 작성/변경을 항상 거부한다
+ * caseId에 활성 상태로 연결된 구성원이고, 사례가 아직 "입원중"인지
+ * 검증한다. 현재 간병인 여부는 보지 않는다.
+ *
+ * 간병일지 작성·정정·사진·위치동의가 이 조건을 쓴다 — 가족간병은 여러
+ * 가족이 번갈아 돌보는 것이 실제 운영 형태라, "현재 간병인" 한 명에게만
+ * 작성을 허용하면 나머지 가족이 매번 현재 간병인 변경을 거쳐야 하는
+ * 불필요한 단계가 생긴다. 작성자 기록은 어차피 세션의 caregiver_id로
+ * 남으므로(클라이언트 지정 불가) 누가 썼는지는 정확히 남는다.
+ *
+ * 간병종료된 사례는 세션이 유효해도 새 작성/변경을 항상 거부한다
  * (기존 기록 조회는 requireCaseMemberSession()으로 계속 허용된다).
- * 클라이언트가 보낸 값은 신뢰하지 않는다.
  */
-export async function requireCurrentCaregiverSession(caseId: string) {
+export async function requireActiveCaseMemberSession(caseId: string) {
   const { supabase, caregiver, caseCaregiver, sessionId } =
     await requireCaseMemberSession(caseId);
-
-  if (!caseCaregiver.is_current_caregiver) {
-    throw new CaregiverAuthError(
-      "현재 간병인으로 등록된 경우에만 수행할 수 있습니다.",
-      403
-    );
-  }
 
   const caseStatus = Array.isArray(caseCaregiver.cases)
     ? caseCaregiver.cases[0]?.status
@@ -185,4 +184,23 @@ export async function requireCurrentCaregiverSession(caseId: string) {
   }
 
   return { supabase, caregiver, caseCaregiver, sessionId };
+}
+
+/**
+ * 위 조건에 더해 "현재 간병인 본인"까지 요구한다. 사례의 대표 상태를
+ * 바꾸는 행위(현재 간병인 변경, 간병종료)에만 쓴다 — 간병일지 작성은
+ * requireActiveCaseMemberSession()으로 충분하다.
+ * 클라이언트가 보낸 값은 신뢰하지 않는다.
+ */
+export async function requireCurrentCaregiverSession(caseId: string) {
+  const session = await requireActiveCaseMemberSession(caseId);
+
+  if (!session.caseCaregiver.is_current_caregiver) {
+    throw new CaregiverAuthError(
+      "현재 간병인으로 등록된 경우에만 수행할 수 있습니다.",
+      403
+    );
+  }
+
+  return session;
 }

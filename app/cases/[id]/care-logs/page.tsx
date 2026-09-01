@@ -138,9 +138,11 @@ export default async function CaseCareLogsPage({
     ? auth?.caseCaregiver.cases[0]?.status
     : auth?.caseCaregiver.cases?.status;
 
-  const canEditOwnLogs =
-    Boolean(auth?.caseCaregiver.is_current_caregiver) &&
-    memberCaseStatus === "입원중";
+  // 작성 권한과 같은 기준이다: 이 사례의 활성 구성원(auth가 있으면 이미
+  // 확인된 사실)이고 사례가 진행 중이면 자기 일지를 정정할 수 있다.
+  // 현재 간병인 여부는 보지 않는다 — 본인 확인은 아래 caregiver_id 대조와
+  // 서버 라우트가 한다.
+  const canEditOwnLogs = Boolean(auth) && memberCaseStatus === "입원중";
 
   const viewerCaregiverId = auth?.caregiver.caregiver_id ?? null;
 
