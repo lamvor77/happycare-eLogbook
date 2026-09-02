@@ -5,6 +5,7 @@ import { formatResidentNumberWithHyphen } from "@/lib/registration-validation";
 import {
   LEGACY_CONSENT_RESPONSE,
   REQUEST_TIMEOUT_MS,
+  toSheetBirthDate,
   toSheetGender,
   type LegacySyncErrorCode,
   type LegacySyncResult,
@@ -251,7 +252,7 @@ export async function syncCaregiverRegistrationToLegacySystem(
     // --- 기존 사례에서 가져오는 값 ---
     현재상태: caseRow.admission_status,
     "환자 성명": caseRow.patient_name,
-    "환자 생년월일": caseRow.patient_birth_date,
+    "환자 생년월일": toSheetBirthDate(caseRow.patient_birth_date),
     "환자 연락처": caseRow.patient_phone,
     "환자 진단명": caseRow.diagnosis_name,
     병원명: hospital?.hospital_name || null,

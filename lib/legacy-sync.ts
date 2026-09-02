@@ -90,6 +90,23 @@ export function toSheetGender(value: string | null): string | null {
 }
 
 /**
+ * 환자 생년월일을 Sheet가 쓰는 8자리 형식("19810115")으로 변환한다.
+ *
+ * DB의 patient_birth_date는 date 타입이라 "1981-01-15"로 직렬화되는데,
+ * 이 문자열을 Sheet에 그대로 쓰면 셀이 날짜 타입으로 자동 변환된다.
+ * 기존 Google Form 시절에는 사용자가 19810115처럼 숫자 8자리로 입력했고
+ * 서류발급관리 탭 복사가 그 형식을 전제로 하므로, 하이픈만 제거해 기존
+ * 형식으로 맞춘다. DB 저장값 자체는 바꾸지 않는다(성별 변환과 같은 원칙).
+ * 예상 밖의 형식이면 손대지 않고 그대로 보낸다.
+ */
+export function toSheetBirthDate(value: string | null): string | null {
+  if (!value) return value;
+
+  const digits = value.replaceAll("-", "");
+  return /^\d{8}$/.test(digits) ? digits : value;
+}
+
+/**
  * "5. 확인 및 동의" 컬럼에 넣을 값 — 기존 Google Form으로 실제 정상
  * 등록된 행에서 확인한 Sheet 저장 문자열 그대로다(2026-08-25, 사용자
  * 확인). 임의로 만든 값이 아니다 — 쉼표/쉼표 뒤 공백/마침표/문장 순서
@@ -283,7 +300,7 @@ export async function syncCaseToLegacySystem(caseId: string): Promise<LegacySync
       : caregiverResidentNumber,
     "간병인 연락처": caregiver?.phone || null,
     "환자 성명": caseRow.patient_name,
-    "환자 생년월일": caseRow.patient_birth_date,
+    "환자 생년월일": toSheetBirthDate(caseRow.patient_birth_date),
     "환자 연락처": caseRow.patient_phone,
     "환자 진단명": caseRow.diagnosis_name,
     병원명: hospital?.hospital_name || null,
