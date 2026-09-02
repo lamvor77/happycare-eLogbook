@@ -12,9 +12,9 @@ import type { Hospital } from "@/types/domain";
  *   - A4 세로, 여백 15mm, 흰 배경, 핑크 계열 라운드 테두리
  *   - 색상: 메인 #EC6A8E / 연한 배경 #FFF2F5 / 연한 테두리 #FFE1E8 /
  *           강조 #D94C72 / 본문 #333333 / 보조 #666666
- *   - 구성: 제목 → 병원명 → "병원 전용 QR" 라벨 → 업무협약 박스 →
- *           QR(최대 크기, 120mm) → 스캔 안내 → 이용 안내 4항목 →
- *           카카오채널 박스
+ *   - 구성: 제목 → 병원명 → "병원 전용 QR" 라벨 → QR(최대 크기) →
+ *           스캔 안내 → 이용 안내 4항목 → 카카오채널 박스
+ *   - 업무협약 안내 박스는 1장 규격을 위해 2026-09-01 사용자 결정으로 제외
  *   - 화면 전용 UI(버튼 등)는 인쇄에 포함하지 않는다(.no-print)
  *
  * 카카오채널 QR은 NEXT_PUBLIC_KAKAO_CHANNEL_URL 환경변수로 바인딩한다.
@@ -28,15 +28,6 @@ const PINK_BG = "#FFF2F5";
 const PINK_BORDER = "#FFE1E8";
 const PINK_DARK = "#D94C72";
 const TEXT = "#333333";
-
-/** 받침 유무에 따라 과/와를 고른다 — "해피병원과", "실로암재활요양병원과" 등. */
-function withGwa(name: string): string {
-  const last = name.charCodeAt(name.length - 1);
-  if (last >= 0xac00 && last <= 0xd7a3) {
-    return (last - 0xac00) % 28 > 0 ? `${name}과` : `${name}와`;
-  }
-  return `${name}과`;
-}
 
 /** 이용 안내 4항목의 선형(라인) 아이콘. 지침: 단순 선형 스타일, 핑크. */
 function GuideIcon({ kind }: { kind: "phone" | "calendar" | "pin" | "lock" }) {
@@ -250,25 +241,6 @@ export default function HospitalQrClient({
             </span>
           </div>
 
-          {/* ② 업무협약 안내 박스 */}
-          <div
-            style={{
-              background: PINK_BG,
-              border: `1pt solid ${PINK_BORDER}`,
-              borderRadius: "3mm",
-              padding: "3mm 5mm",
-              marginTop: "3.5mm",
-              fontSize: "12pt",
-              fontWeight: 500,
-              lineHeight: 1.55,
-            }}
-          >
-            {withGwa(hospital.hospital_name)} 해피간병은 신뢰도 높은 간병일지
-            작성을 위해{" "}
-            <strong style={{ color: PINK_DARK, fontWeight: 700 }}>업무협약</strong>
-            을 맺고 함께하고 있습니다.
-          </div>
-
           {/* ③ QR 코드 영역 — 가장 크게, 핑크 라운드 테두리, 120mm.
               화면 해상도(px)와 무관하게 선명하도록 캔버스는 크게 그리고
               CSS로 축소해서 보여준다. */}
@@ -276,7 +248,7 @@ export default function HospitalQrClient({
             style={{
               display: "flex",
               justifyContent: "center",
-              marginTop: "4mm",
+              marginTop: "5mm",
             }}
           >
             <div
