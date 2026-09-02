@@ -45,10 +45,10 @@ export default async function LogPage({
   const kakaoChannelUrl = process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "";
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-md mx-auto space-y-4">
-        <div className="bg-white rounded-lg shadow p-6 mt-6">
-          <h1 className="text-2xl font-bold mb-2">
+    <main className="min-h-[100dvh] bg-gray-50 p-3">
+      <div className="max-w-md mx-auto space-y-2.5">
+        <div className="bg-white rounded-lg shadow px-4 py-3">
+          <h1 className="text-xl font-bold mb-1">
             해피간병 전자간병일지
           </h1>
 
@@ -56,7 +56,7 @@ export default async function LogPage({
             {hospital.hospital_name}
           </p>
 
-          <p className="text-sm text-gray-700 mt-1">
+          <p className="text-xs text-gray-700 mt-0.5">
             {hospital.hospital_address || "-"}
           </p>
         </div>
@@ -66,10 +66,10 @@ export default async function LogPage({
             알림이 가고, 담당자 처리 후 등록 관련 안내가 이어지는 구조라
             "접수 및 등록 관련 안내"로만 말한다("승인 완료" 같은 표현
             금지). */}
-        <div className="rounded-lg p-5 bg-[#FFF2F5] border border-[#FFE1E8]">
-          <h2 className="font-bold text-[#D94C72] mb-3">처음 이용하시나요?</h2>
+        <div className="rounded-lg px-4 py-3 bg-[#FFF2F5] border border-[#FFE1E8]">
+          <h2 className="font-bold text-sm text-[#D94C72] mb-1.5">처음 이용하시나요?</h2>
 
-          <ol className="space-y-2.5 text-sm text-gray-800 leading-relaxed">
+          <ol className="space-y-1.5 text-[13px] text-gray-800 leading-snug">
             <li className="flex gap-2">
               <span className="shrink-0 font-bold text-[#EC6A8E]">①</span>
               <span>
@@ -95,10 +95,10 @@ export default async function LogPage({
         </div>
 
         {/* 주요 액션 3개 — href/동작은 기존 그대로, 보조 문구만 더한다. */}
-        <div className="bg-white rounded-lg shadow p-5 space-y-3">
+        <div className="bg-white rounded-lg shadow p-3 space-y-2">
           <a
             href="/my-cases"
-            className="block text-center bg-blue-600 text-white px-4 py-3 rounded-lg"
+            className="block text-center bg-blue-600 text-white px-4 py-2.5 rounded-lg"
           >
             <span className="block font-bold">간병일지 작성</span>
             <span className="block text-xs text-blue-100 mt-0.5">
@@ -108,7 +108,7 @@ export default async function LogPage({
 
           <a
             href={registerHref}
-            className="block text-center bg-gray-700 text-white px-4 py-3 rounded-lg"
+            className="block text-center bg-gray-700 text-white px-4 py-2.5 rounded-lg"
           >
             <span className="block font-bold">간병인 &amp; 환자 최초 등록</span>
             <span className="block text-xs text-gray-300 mt-0.5">
@@ -118,7 +118,7 @@ export default async function LogPage({
 
           <a
             href="/case-join"
-            className="block text-center bg-green-600 text-white px-4 py-3 rounded-lg"
+            className="block text-center bg-green-600 text-white px-4 py-2.5 rounded-lg"
           >
             <span className="block font-bold">가족간병인 추가</span>
             <span className="block text-xs text-green-100 mt-0.5">
@@ -130,10 +130,10 @@ export default async function LogPage({
         {/* 문의 및 안내 — 공개 카카오채널로만 연결한다. 환경변수가 없으면
             영역 자체를 생략한다(깨진 링크를 보여주지 않는다). */}
         {kakaoChannelUrl && (
-          <div className="rounded-lg p-5 bg-white border border-[#FFE1E8]">
-            <h2 className="font-bold text-sm text-gray-800 mb-2">문의 및 안내</h2>
+          <div className="rounded-lg px-4 py-3 bg-white border border-[#FFE1E8]">
+            <h2 className="font-bold text-sm text-gray-800 mb-1">문의 및 안내</h2>
 
-            <p className="text-sm text-gray-600 leading-relaxed mb-3">
+            <p className="text-xs text-gray-600 leading-snug mb-2">
               간병일지 이용방법, 간병종료 후 관련 서류 발급, 수수료 등의
               안내는 해피간병 카카오채널에서 확인하실 수 있습니다.
             </p>
@@ -142,7 +142,7 @@ export default async function LogPage({
               href={kakaoChannelUrl}
               target="_blank"
               rel="noreferrer"
-              className="block text-center border border-[#EC6A8E] text-[#D94C72] font-bold px-4 py-3 rounded-lg"
+              className="block text-center border border-[#EC6A8E] text-[#D94C72] font-bold text-sm px-4 py-2.5 rounded-lg"
             >
               해피간병 카카오채널 바로가기
             </a>
