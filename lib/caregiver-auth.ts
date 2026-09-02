@@ -197,7 +197,7 @@ export async function requireCurrentCaregiverSession(caseId: string) {
 
   if (!session.caseCaregiver.is_current_caregiver) {
     throw new CaregiverAuthError(
-      "현재 간병인으로 등록된 경우에만 수행할 수 있습니다.",
+      "대표 간병인으로 등록된 경우에만 수행할 수 있습니다.",
       403
     );
   }

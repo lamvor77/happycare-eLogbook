@@ -6,6 +6,7 @@ import {
 } from "@/lib/case-caregivers";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
+import CaregiverLogoutButton from "@/app/my-cases/CaregiverLogoutButton";
 import CaseHistory from "./CaseHistory";
 import type { CaseCaregiver, CareLog } from "@/types/domain";
 import { CARE_LOG_PHOTO_BUCKET } from "@/lib/care-log-photo";
@@ -241,7 +242,7 @@ export default async function CaseDetailPage({
                   {item.caregivers?.caregiver_name || "-"} ({item.relationship})
                 </p>
                 <p>연락처: {item.caregivers?.phone || "-"}</p>
-                <p>현재 간병인: {item.is_current_caregiver ? "예" : "아니오"}</p>
+                <p>대표 간병인: {item.is_current_caregiver ? "예" : "아니오"}</p>
                 <p>주간병인: {item.is_primary_caregiver ? "예" : "아니오"}</p>
                 <p>상태: {item.status || "-"}</p>
               </div>
@@ -314,6 +315,15 @@ export default async function CaseDetailPage({
 
         <EndCareButton caseId={caseData.case_id} canEnd={canManage}
         />
+
+        {/* 간병인 세션일 때만 보이는 보조 액션. 이 화면은 관리자 폴백
+            조회(auth === null)도 지나므로, 관리자에게 간병인 로그아웃이
+            노출되지 않도록 세션 존재로만 판단한다. */}
+        {auth && (
+          <div className="text-center pb-8">
+            <CaregiverLogoutButton />
+          </div>
+        )}
       </div>
     </main>
   );

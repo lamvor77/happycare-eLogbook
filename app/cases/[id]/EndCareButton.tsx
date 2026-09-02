@@ -43,7 +43,7 @@ export default function EndCareButton({
     return (
       <div className="bg-white rounded-lg shadow p-5">
         <p className="text-sm text-gray-600">
-          현재 간병인으로 로그인한 경우에만 간병을 종료할 수 있습니다.
+          대표 간병인으로 로그인한 경우에만 간병을 종료할 수 있습니다.
         </p>
 
         <a

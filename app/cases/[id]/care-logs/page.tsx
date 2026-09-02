@@ -9,6 +9,7 @@ import {
 import { getAdminViewerSession } from "@/lib/admin-auth";
 import { formatKstDateTime } from "@/lib/kst";
 import CareLogEditor from "./CareLogEditor";
+import CaregiverLogoutButton from "@/app/my-cases/CaregiverLogoutButton";
 
 function getLocationFailureLabel(reason?: string | null) {
   if (reason === "permission_denied") return "사용자가 위치 권한을 거부함";
@@ -343,6 +344,14 @@ export default async function CaseCareLogsPage({
           >
             사례 상세로 돌아가기
           </a>
+
+          {/* 간병인 세션일 때만 보이는 보조 액션. 관리자 폴백 조회
+              (auth === null)에는 노출하지 않는다. */}
+          {auth && (
+            <div className="text-center pt-2">
+              <CaregiverLogoutButton />
+            </div>
+          )}
         </div>
       </div>
     </main>

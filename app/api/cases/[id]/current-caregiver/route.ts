@@ -42,7 +42,7 @@ export async function POST(
   }
 
   if (targetId === caseCaregiver.case_caregiver_id) {
-    return NextResponse.json({ error: "이미 현재 간병인입니다." }, { status: 400 });
+    return NextResponse.json({ error: "이미 대표 간병인입니다." }, { status: 400 });
   }
 
   const { data: targetCaregiver, error: targetError } = await supabase
@@ -71,7 +71,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "현재 간병인 변경에 실패했습니다. 잠시 후 다시 시도해주세요.",
+          "대표 간병인 변경에 실패했습니다. 잠시 후 다시 시도해주세요.",
       },
       { status: 500 }
     );

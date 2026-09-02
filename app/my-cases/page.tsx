@@ -86,7 +86,7 @@ export default async function MyCasesPage() {
               </p>
               <p className="text-sm text-gray-600">
                 관계: {link.relationship}
-                {link.is_current_caregiver ? " (현재 간병인)" : ""}
+                {link.is_current_caregiver ? " (대표 간병인)" : ""}
               </p>
             </a>
           ))

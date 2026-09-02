@@ -50,7 +50,7 @@ export default function ChangeCurrentCaregiver({
       return;
     }
 
-    setMessage("현재 간병인이 변경되었습니다.");
+    setMessage("대표 간병인이 변경되었습니다.");
 
     setTimeout(() => {
       window.location.reload();
@@ -59,7 +59,7 @@ export default function ChangeCurrentCaregiver({
 
   return (
     <div className="bg-white rounded-lg shadow p-5">
-      <h2 className="font-bold mb-3">현재 간병인 변경</h2>
+      <h2 className="font-bold mb-3">대표 간병인 변경</h2>
 
       <select
         className="w-full border p-3 rounded mb-3"
@@ -83,7 +83,7 @@ export default function ChangeCurrentCaregiver({
         disabled={saving}
         className="w-full bg-orange-600 text-white p-3 rounded disabled:opacity-50"
       >
-        {saving ? "변경 중..." : "현재 간병인 변경"}
+        {saving ? "변경 중..." : "대표 간병인 변경"}
       </button>
 
       {message && (
