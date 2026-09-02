@@ -99,6 +99,7 @@ const PRINT_CSS = `
   @page { size: A4 portrait; margin: 15mm; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .no-print { display: none !important; }
+  main { padding: 0 !important; background: #ffffff !important; min-height: 0 !important; }
   .print-container { width: 100% !important; max-width: 100% !important; padding: 0 !important; box-shadow: none !important; }
 }
 `;
@@ -192,14 +193,14 @@ export default function HospitalQrClient({
           style={{
             border: `2.5pt solid ${PINK}`,
             borderRadius: "5mm",
-            padding: "5mm 7mm",
+            padding: "4mm 7mm",
             textAlign: "center",
           }}
         >
           {/* ① 상단 제목 영역 */}
           <h1
             style={{
-              fontSize: "36pt",
+              fontSize: "32pt",
               fontWeight: 700,
               letterSpacing: "-0.02em",
               lineHeight: 1.15,
@@ -219,7 +220,7 @@ export default function HospitalQrClient({
             }}
           >
             <span style={{ width: "22mm", height: "1pt", background: PINK }} />
-            <span style={{ fontSize: "20pt", fontWeight: 700, color: PINK }}>
+            <span style={{ fontSize: "18pt", fontWeight: 700, color: PINK }}>
               {hospital.hospital_name}
             </span>
             <span style={{ width: "22mm", height: "1pt", background: PINK }} />
@@ -248,27 +249,27 @@ export default function HospitalQrClient({
             style={{
               display: "flex",
               justifyContent: "center",
-              marginTop: "5mm",
+              marginTop: "3mm",
             }}
           >
             <div
               style={{
                 border: `2pt solid ${PINK}`,
                 borderRadius: "4mm",
-                padding: "3mm",
+                padding: "2.5mm",
                 background: "#ffffff",
               }}
             >
               <QRCodeCanvas
                 value={qrUrl}
                 size={960}
-                style={{ width: "100mm", height: "100mm", display: "block" }}
+                style={{ width: "90mm", height: "90mm", display: "block" }}
               />
             </div>
           </div>
 
           {/* ④ 안내 문구 */}
-          <p style={{ fontSize: "16pt", fontWeight: 700, marginTop: "3.5mm" }}>
+          <p style={{ fontSize: "14pt", fontWeight: 700, marginTop: "2.5mm" }}>
             QR을 스캔하여{" "}
             <span style={{ color: PINK_DARK }}>간병일지</span>를 작성해 주세요.
           </p>
@@ -279,7 +280,7 @@ export default function HospitalQrClient({
               fontSize: "12pt",
               fontWeight: 700,
               color: PINK,
-              marginTop: "3.5mm",
+              marginTop: "2.5mm",
             }}
           >
             · · · 이용 안내 · · ·
@@ -304,14 +305,14 @@ export default function HospitalQrClient({
               >
                 <div
                   style={{
-                    width: "11mm",
-                    height: "11mm",
+                    width: "10mm",
+                    height: "10mm",
                     borderRadius: "50%",
                     background: PINK_BG,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    margin: "0 auto 2mm",
+                    margin: "0 auto 1.5mm",
                   }}
                 >
                   <GuideIcon kind={item.icon} />
@@ -340,7 +341,7 @@ export default function HospitalQrClient({
                 border: `1pt solid ${PINK_BORDER}`,
                 borderRadius: "3mm",
                 padding: "3mm 5mm",
-                marginTop: "3.5mm",
+                marginTop: "2.5mm",
                 display: "flex",
                 alignItems: "center",
                 gap: "5mm",
