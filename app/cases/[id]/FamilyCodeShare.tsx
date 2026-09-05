@@ -12,11 +12,13 @@ import { useState } from "react";
  * 코드를 손으로 받아쓰면 틀리기 쉬우므로 바로 복사하거나 메신저로 보낼
  * 수 있게 한다.
  *
- * 공유 문구에는 참여 링크(/case-join?code=...)를 함께 담는다 — 받는
- * 사람이 코드를 다시 입력하지 않아도 되고, 그 화면이 코드를 미리
- * 채워 준다(CaseJoinClient가 searchParams의 code를 초기값으로 쓴다).
+ * 공유 문구에는 앱 내부 URL을 절대 넣지 않는다(2026-09-05 정책). 참여
+ * 링크(/case-join?code=...)를 함께 보내면 받는 사람이 병원 QR을 거치지
+ * 않고 바로 등록 화면으로 들어올 수 있는데, 그 링크는 메신저에서 다시
+ * 전달되며 원래 가족이 아닌 사람에게도 그대로 열린다. 전달하는 것은
+ * 가족코드 값 하나뿐이고, 진입 경로는 병원에 비치된 QR로 고정한다.
  *
- * 환자명 등 개인정보는 공유 문구에 넣지 않는다. 코드와 링크만 보낸다.
+ * 환자명 등 개인정보도 공유 문구에 넣지 않는다.
  */
 export default function FamilyCodeShare({
   familyCode,
@@ -25,12 +27,13 @@ export default function FamilyCodeShare({
 }) {
   const [notice, setNotice] = useState("");
 
-  function joinUrl() {
-    return `${window.location.origin}/case-join?code=${encodeURIComponent(familyCode)}`;
-  }
-
+  // 가족코드 값 + "병원 QR로 진행" 안내만 담는다. URL은 넣지 않는다.
   function shareText() {
-    return `해피간병 가족간병인 참여 안내\n가족코드: ${familyCode}\n${joinUrl()}`;
+    return (
+      `해피간병 가족코드: ${familyCode}\n\n` +
+      `병원에 비치된 QR을 본인 휴대폰으로 스캔한 후\n` +
+      `'가족간병인 추가'에서 이 가족코드를 입력해 주세요.`
+    );
   }
 
   /**

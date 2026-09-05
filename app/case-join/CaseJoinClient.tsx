@@ -104,7 +104,14 @@ export default function CaseJoinClient() {
     const response = await fetch("/api/caregiver-auth/send-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: phoneNormalized }),
+      // 가족코드를 함께 보낸다. 서버가 OTP를 만들기 전에 먼저 확인하므로,
+      // 코드가 틀렸다면 인증과 동의를 다 마친 뒤가 아니라 이 자리에서 바로
+      // 알 수 있다(SMS도 나가지 않는다). 최종 검증은 참여 API가 그대로
+      // 다시 수행한다.
+      body: JSON.stringify({
+        phone: phoneNormalized,
+        family_code: familyCode.trim(),
+      }),
     });
 
     setSaving(false);
