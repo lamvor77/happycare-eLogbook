@@ -12,7 +12,8 @@ import type { Hospital } from "@/types/domain";
  *   - A4 세로, 여백 15mm, 흰 배경, 핑크 계열 라운드 테두리
  *   - 색상: 메인 #EC6A8E / 연한 배경 #FFF2F5 / 연한 테두리 #FFE1E8 /
  *           강조 #D94C72 / 본문 #333333 / 보조 #666666
- *   - 구성: 제목 → 병원명 → "병원 전용 QR" 라벨 → QR(최대 크기) →
+ *   - 구성: 2줄 제목(가족간병 일지 작성 / 해피간병이 도와드립니다) →
+ *           병원명 → "병원 전용 QR" 라벨 → QR(110mm, 시선의 중심) →
  *           스캔 안내 → 이용 안내 4항목 → 카카오채널 박스
  *   - 업무협약 안내 박스는 1장 규격을 위해 2026-09-01 사용자 결정으로 제외
  *   - 화면 전용 UI(버튼 등)는 인쇄에 포함하지 않는다(.no-print)
@@ -197,17 +198,32 @@ export default function HospitalQrClient({
             textAlign: "center",
           }}
         >
-          {/* ① 상단 제목 영역 */}
-          <h1
-            style={{
-              fontSize: "34pt",
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.15,
-              color: "#111111",
-            }}
-          >
-            해피간병 전자간병일지
+          {/* ① 상단 제목 — 2줄, 핵심 단어만 핑크 강조. 세로 공간을 아껴야
+              중앙 QR(110mm)이 1장 안에 들어간다(headless Chrome 인쇄 실측:
+              현 조판 기준 114mm까지 1장, 116mm부터 2장 — 4mm 여유를 둠). */}
+          <h1 style={{ margin: 0, lineHeight: 1.15 }}>
+            <span
+              style={{
+                display: "block",
+                fontSize: "23pt",
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
+                color: "#111111",
+              }}
+            >
+              <span style={{ color: PINK }}>가족간병</span> 일지 작성
+            </span>
+            <span
+              style={{
+                display: "block",
+                fontSize: "17pt",
+                fontWeight: 600,
+                color: TEXT,
+                marginTop: "0.5mm",
+              }}
+            >
+              해피간병이 도와드립니다
+            </span>
           </h1>
 
           <div
@@ -216,7 +232,7 @@ export default function HospitalQrClient({
               alignItems: "center",
               justifyContent: "center",
               gap: "5mm",
-              marginTop: "2mm",
+              marginTop: "1.5mm",
             }}
           >
             <span style={{ width: "22mm", height: "1pt", background: PINK }} />
@@ -226,7 +242,7 @@ export default function HospitalQrClient({
             <span style={{ width: "22mm", height: "1pt", background: PINK }} />
           </div>
 
-          <div style={{ marginTop: "2mm" }}>
+          <div style={{ marginTop: "1.5mm" }}>
             <span
               style={{
                 display: "inline-block",
@@ -235,41 +251,41 @@ export default function HospitalQrClient({
                 fontSize: "12pt",
                 fontWeight: 700,
                 borderRadius: "99mm",
-                padding: "1.4mm 7mm",
+                padding: "1.2mm 7mm",
               }}
             >
               병원 전용 QR
             </span>
           </div>
 
-          {/* ③ QR 코드 영역 — 가장 크게, 핑크 라운드 테두리, 120mm.
+          {/* ③ QR 코드 영역 — 포스터의 중심. 핑크 라운드 테두리, 110mm.
               화면 해상도(px)와 무관하게 선명하도록 캔버스는 크게 그리고
               CSS로 축소해서 보여준다. */}
           <div
             style={{
               display: "flex",
               justifyContent: "center",
-              marginTop: "4mm",
+              marginTop: "3mm",
             }}
           >
             <div
               style={{
                 border: `2pt solid ${PINK}`,
                 borderRadius: "4mm",
-                padding: "2.5mm",
+                padding: "4mm",
                 background: "#ffffff",
               }}
             >
               <QRCodeCanvas
                 value={qrUrl}
                 size={960}
-                style={{ width: "100mm", height: "100mm", display: "block" }}
+                style={{ width: "110mm", height: "110mm", display: "block" }}
               />
             </div>
           </div>
 
           {/* ④ 안내 문구 */}
-          <p style={{ fontSize: "15pt", fontWeight: 700, marginTop: "3mm" }}>
+          <p style={{ fontSize: "13.5pt", fontWeight: 700, marginTop: "2.5mm" }}>
             QR을 스캔하여{" "}
             <span style={{ color: PINK_DARK }}>간병일지</span>를 작성해 주세요.
           </p>
@@ -280,7 +296,7 @@ export default function HospitalQrClient({
               fontSize: "12pt",
               fontWeight: 700,
               color: PINK,
-              marginTop: "3mm",
+              marginTop: "2.5mm",
             }}
           >
             · · · 이용 안내 · · ·
@@ -340,8 +356,8 @@ export default function HospitalQrClient({
                 background: PINK_BG,
                 border: `1pt solid ${PINK_BORDER}`,
                 borderRadius: "3mm",
-                padding: "3.5mm 5mm",
-                marginTop: "3.5mm",
+                padding: "3mm 5mm",
+                marginTop: "3mm",
                 display: "flex",
                 alignItems: "center",
                 gap: "5mm",
