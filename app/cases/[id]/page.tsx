@@ -308,12 +308,6 @@ export default async function CaseDetailPage({
             작성기록 보기
         </a>
 
-        <a
-            href={`/case-join?code=${caseData.family_code}`}
-            className="text-center bg-green-600 text-white px-4 py-3 rounded"
-        >
-            가족간병인 추가
-        </a>
         </div>
 
         <EndCareButton caseId={caseData.case_id} canEnd={canManage}

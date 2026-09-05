@@ -91,6 +91,16 @@ export default async function LogPage({
               <span className="shrink-0 font-bold text-[#EC6A8E]">③</span>
               <span>등록 후에는 간병일지를 작성할 수 있습니다.</span>
             </li>
+
+            <li className="flex gap-2">
+              <span className="shrink-0 font-bold text-[#EC6A8E]">④</span>
+              <span>
+                가족이 함께 간병하는 경우, 기존에 등록한 가족에게{" "}
+                <b className="text-[#D94C72]">가족코드</b>를 전달받아{" "}
+                <b>추가되는 가족 본인의 휴대폰</b>에서 아래{" "}
+                <b>가족간병인 추가</b>를 진행해 주세요.
+              </span>
+            </li>
           </ol>
         </div>
 
@@ -122,7 +132,7 @@ export default async function LogPage({
           >
             <span className="block font-bold">가족간병인 추가</span>
             <span className="block text-xs text-green-100 mt-0.5">
-              함께 간병할 가족을 본인 휴대폰 인증으로 추가합니다.
+              기존 등록 가족에게 받은 가족코드로 등록합니다.
             </span>
           </a>
         </div>

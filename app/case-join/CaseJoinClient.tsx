@@ -311,6 +311,29 @@ export default function CaseJoinClient() {
             아래 항목을 모두 확인해야 참여할 수 있습니다.
           </p>
 
+          {/* 전체 동의 — 최초 등록(app/case-register/CaseRegisterClient.tsx)과
+              같은 방식이다. 별도 state를 두지 않고 consentComplete(파생값)를
+              그대로 쓰므로 개별 6개를 다 체크하면 자동으로 켜지고 하나만
+              풀어도 자동으로 꺼진다. 저장 payload는 달라지지 않는다. */}
+          <label className="flex items-start gap-2 border rounded p-3 text-sm font-bold mb-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={consentComplete}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setConsents(() => {
+                  const next = {} as Record<ConsentKey, boolean>;
+                  for (const item of CONSENT_ITEMS) {
+                    next[item.key] = checked;
+                  }
+                  return next;
+                });
+              }}
+            />
+            <span>전체 동의</span>
+          </label>
+
           <div className="space-y-2">
             {CONSENT_ITEMS.map((item) => (
               <label
