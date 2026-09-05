@@ -194,20 +194,21 @@ export default function HospitalQrClient({
           style={{
             border: `2.5pt solid ${PINK}`,
             borderRadius: "5mm",
-            padding: "5mm 7mm",
+            padding: "3mm 7mm",
             textAlign: "center",
           }}
         >
-          {/* ① 상단 제목 — 2줄, 브랜드명만 핑크 강조.
-              제목 크기와 QR 크기는 같은 세로 공간을 두고 경쟁한다. headless
-              Chrome 인쇄 실측 결과 QR 108mm에서는 제목 31pt까지 1장이라,
-              2pt 여유를 두고 29pt로 정했다(QR 110mm였다면 제목이 27pt에서
-              막힌다 — 2mm를 내주고 제목을 6pt 키운 선택이다). */}
+          {/* ① 상단 제목 — 2줄, 핵심 단어만 핑크 강조.
+              제목과 QR은 같은 세로 공간을 두고 경쟁한다. QR을 줄이는 대신
+              바깥 테두리 상하 패딩(5→3mm)과 이용안내 아이콘 원(11→10mm)에서
+              여백을 회수해 둘 다 키웠다. headless Chrome 인쇄 실측: 이
+              조판에서 QR 108mm를 유지한 채 제목 40pt까지 1장이라 3pt 여유를
+              두고 37pt로 정했다. */}
           <h1 style={{ margin: 0, lineHeight: 1.15 }}>
             <span
               style={{
                 display: "block",
-                fontSize: "29pt",
+                fontSize: "37pt",
                 fontWeight: 700,
                 letterSpacing: "-0.02em",
                 color: "#111111",
@@ -218,7 +219,7 @@ export default function HospitalQrClient({
             <span
               style={{
                 display: "block",
-                fontSize: "19pt",
+                fontSize: "21pt",
                 fontWeight: 600,
                 color: TEXT,
                 marginTop: "0.5mm",
@@ -323,8 +324,8 @@ export default function HospitalQrClient({
               >
                 <div
                   style={{
-                    width: "11mm",
-                    height: "11mm",
+                    width: "10mm",
+                    height: "10mm",
                     borderRadius: "50%",
                     background: PINK_BG,
                     display: "flex",
