@@ -12,7 +12,7 @@ import type { Hospital } from "@/types/domain";
  *   - A4 세로, 여백 15mm, 흰 배경, 핑크 계열 라운드 테두리
  *   - 색상: 메인 #EC6A8E / 연한 배경 #FFF2F5 / 연한 테두리 #FFE1E8 /
  *           강조 #D94C72 / 본문 #333333 / 보조 #666666
- *   - 구성: 2줄 제목(해피간병 간병일지 / 해피간병이 도와드립니다) →
+ *   - 구성: 2줄 제목(가족간병 간병일지 / 해피간병이 도와드립니다) →
  *           병원명 → "병원 전용 QR" 라벨 → QR(108mm, 시선의 중심) →
  *           스캔 안내 → 이용 안내 4항목 → 카카오채널 박스
  *   - 업무협약 안내 박스는 1장 규격을 위해 2026-09-01 사용자 결정으로 제외
@@ -213,7 +213,7 @@ export default function HospitalQrClient({
                 color: "#111111",
               }}
             >
-              <span style={{ color: PINK }}>해피간병</span> 간병일지
+              <span style={{ color: PINK }}>가족간병</span> 간병일지
             </span>
             <span
               style={{
