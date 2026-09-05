@@ -12,8 +12,8 @@ import type { Hospital } from "@/types/domain";
  *   - A4 세로, 여백 15mm, 흰 배경, 핑크 계열 라운드 테두리
  *   - 색상: 메인 #EC6A8E / 연한 배경 #FFF2F5 / 연한 테두리 #FFE1E8 /
  *           강조 #D94C72 / 본문 #333333 / 보조 #666666
- *   - 구성: 2줄 제목(가족간병 일지 작성 / 해피간병이 도와드립니다) →
- *           병원명 → "병원 전용 QR" 라벨 → QR(110mm, 시선의 중심) →
+ *   - 구성: 2줄 제목(해피간병 간병일지 / 해피간병이 도와드립니다) →
+ *           병원명 → "병원 전용 QR" 라벨 → QR(108mm, 시선의 중심) →
  *           스캔 안내 → 이용 안내 4항목 → 카카오채널 박스
  *   - 업무협약 안내 박스는 1장 규격을 위해 2026-09-01 사용자 결정으로 제외
  *   - 화면 전용 UI(버튼 등)는 인쇄에 포함하지 않는다(.no-print)
@@ -198,25 +198,27 @@ export default function HospitalQrClient({
             textAlign: "center",
           }}
         >
-          {/* ① 상단 제목 — 2줄, 핵심 단어만 핑크 강조. 세로 공간을 아껴야
-              중앙 QR(110mm)이 1장 안에 들어간다(headless Chrome 인쇄 실측:
-              현 조판 기준 114mm까지 1장, 116mm부터 2장 — 4mm 여유를 둠). */}
+          {/* ① 상단 제목 — 2줄, 브랜드명만 핑크 강조.
+              제목 크기와 QR 크기는 같은 세로 공간을 두고 경쟁한다. headless
+              Chrome 인쇄 실측 결과 QR 108mm에서는 제목 31pt까지 1장이라,
+              2pt 여유를 두고 29pt로 정했다(QR 110mm였다면 제목이 27pt에서
+              막힌다 — 2mm를 내주고 제목을 6pt 키운 선택이다). */}
           <h1 style={{ margin: 0, lineHeight: 1.15 }}>
             <span
               style={{
                 display: "block",
-                fontSize: "23pt",
+                fontSize: "29pt",
                 fontWeight: 700,
                 letterSpacing: "-0.02em",
                 color: "#111111",
               }}
             >
-              <span style={{ color: PINK }}>가족간병</span> 일지 작성
+              <span style={{ color: PINK }}>해피간병</span> 간병일지
             </span>
             <span
               style={{
                 display: "block",
-                fontSize: "17pt",
+                fontSize: "19pt",
                 fontWeight: 600,
                 color: TEXT,
                 marginTop: "0.5mm",
@@ -258,7 +260,7 @@ export default function HospitalQrClient({
             </span>
           </div>
 
-          {/* ③ QR 코드 영역 — 포스터의 중심. 핑크 라운드 테두리, 110mm.
+          {/* ③ QR 코드 영역 — 포스터의 중심. 핑크 라운드 테두리, 108mm.
               화면 해상도(px)와 무관하게 선명하도록 캔버스는 크게 그리고
               CSS로 축소해서 보여준다. */}
           <div
@@ -279,7 +281,7 @@ export default function HospitalQrClient({
               <QRCodeCanvas
                 value={qrUrl}
                 size={960}
-                style={{ width: "110mm", height: "110mm", display: "block" }}
+                style={{ width: "108mm", height: "108mm", display: "block" }}
               />
             </div>
           </div>
