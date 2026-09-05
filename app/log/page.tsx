@@ -38,7 +38,20 @@ export default async function LogPage({
   }
 
   const hospitalQuery = q ? `q=${q}` : `h=${h}`;
-  const registerHref = `/case-register?${hospitalQuery}`;
+
+  // 다음 단계 버튼의 목적지. 정상 QR(q)로 들어왔으면 /log/enter를 거친다 —
+  // 그 라우트가 q를 다시 검증하고 "병원 QR을 통과했다"는 증표(hc_qr_pass)를
+  // 심은 뒤 목적지로 즉시 redirect한다(사용자는 중간 단계를 보지 않는다).
+  // h(병원코드)로 들어온 경우에는 증표를 발급하지 않으므로 기존 링크 그대로다
+  // — 병원코드는 현장 QR을 스캔했다는 증거가 아니다.
+  const enterHref = (next: string) =>
+    q
+      ? `/log/enter?q=${encodeURIComponent(q)}&next=${encodeURIComponent(next)}`
+      : next;
+
+  const writeHref = enterHref("/my-cases");
+  const registerHref = q ? enterHref("/case-register") : `/case-register?${hospitalQuery}`;
+  const joinHref = enterHref("/case-join");
 
   // 공개 채널 주소만 사용한다. 사례/간병인/병원 토큰 등 어떤 식별자도
   // 이 URL에 붙이지 않는다(개인정보/토큰이 카카오로 전달되면 안 된다).
@@ -107,7 +120,7 @@ export default async function LogPage({
         {/* 주요 액션 3개 — href/동작은 기존 그대로, 보조 문구만 더한다. */}
         <div className="bg-white rounded-lg shadow p-3 space-y-2">
           <a
-            href="/my-cases"
+            href={writeHref}
             className="block text-center bg-blue-600 text-white px-4 py-2.5 rounded-lg"
           >
             <span className="block font-bold">간병일지 작성</span>
@@ -127,7 +140,7 @@ export default async function LogPage({
           </a>
 
           <a
-            href="/case-join"
+            href={joinHref}
             className="block text-center bg-green-600 text-white px-4 py-2.5 rounded-lg"
           >
             <span className="block font-bold">가족간병인 추가</span>
