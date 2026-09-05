@@ -9,6 +9,8 @@ import {
 } from "@/lib/care-log-photo";
 import { getCareLogToday } from "@/lib/care-log-date";
 import { formatKstDateTime } from "@/lib/kst";
+import { readQrPass } from "@/lib/qr-pass-cookie";
+import { checkQrPassAgainstCase, QR_PASS_REQUIRED_MESSAGE } from "@/lib/qr-pass";
 
 export default async function CaseCareLogPage({
   params,
@@ -43,9 +45,10 @@ export default async function CaseCareLogPage({
 
   // 이 화면은 환자명 표시에만 사례 데이터를 쓴다. 작성자 정보는 세션에서
   // 오므로 case_caregivers를 중첩 조회할 이유가 없다.
+  // hospital_id는 아래 QR 증표 대조에만 쓴다.
   const { data: caseData, error } = await supabase
     .from("cases")
-    .select("case_id, patient_name")
+    .select("case_id, patient_name, hospital_id")
     .eq("case_id", id)
     .maybeSingle();
 
@@ -189,6 +192,52 @@ export default async function CaseCareLogPage({
                   : "다른 간병인이 작성한 일지라 수정할 수 없습니다."}
               </p>
             )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 pb-8">
+            <a
+              href={`/cases/${id}/care-logs`}
+              className="text-center bg-blue-600 text-white px-4 py-3 rounded"
+            >
+              작성기록 보기
+            </a>
+
+            <a
+              href={`/cases/${id}`}
+              className="text-center bg-gray-700 text-white px-4 py-3 rounded"
+            >
+              사례 상세로 돌아가기
+            </a>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // 여기부터는 "오늘 일지가 없어 새로 작성하는" 경우다. 새 작성은 병원 QR을
+  // 스캔한 뒤에만 가능하다(운영 정책, 2026-09-05 확정) — 작성 API가 같은
+  // 조건으로 거부하므로, 폼을 띄웠다가 저장에서 막히지 않게 여기서 먼저
+  // 안내한다. 위의 "오늘 일지 있음" 분기(조회·정정)는 이 검사를 거치지
+  // 않는다.
+  const qrPassCheck = checkQrPassAgainstCase(await readQrPass(), caseData.hospital_id);
+
+  if (!qrPassCheck.allowed) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-md mx-auto space-y-4">
+          <div className="bg-white rounded-lg shadow p-5">
+            <h1 className="text-2xl font-bold">간병일지 작성</h1>
+
+            <p className="text-gray-600 mt-2">환자명: {caseData.patient_name}</p>
+
+            <div className="mt-4 bg-[#FFF2F5] border border-[#FFE1E8] text-[#D94C72] p-3 rounded text-sm font-bold">
+              {QR_PASS_REQUIRED_MESSAGE}
+            </div>
+
+            <p className="text-sm text-gray-700 mt-3 leading-snug">
+              간병일지는 병원에 비치된 QR을 스캔한 뒤 작성할 수 있습니다. QR을
+              스캔하면 나오는 화면에서 <b>간병일지 작성</b>을 눌러 주세요.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-2 pb-8">

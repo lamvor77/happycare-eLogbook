@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { CaregiverAuthError, requireActiveCaseMemberSession } from "@/lib/caregiver-auth";
 import { isSameOriginRequest, sameOriginErrorResponse } from "@/lib/request-guard";
 import { getCareLogToday } from "@/lib/care-log-date";
+import { readQrPass } from "@/lib/qr-pass-cookie";
+import { checkQrPassAgainstCase, QR_PASS_REQUIRED_MESSAGE } from "@/lib/qr-pass";
 
 type LocationStatus = "checked" | "unavailable";
 
@@ -95,6 +97,23 @@ export async function POST(
       { error: "간병이 종료된 사례에는 간병일지를 작성할 수 없습니다." },
       { status: 400 }
     );
+  }
+
+  // 새 간병일지는 "병원에 비치된 QR을 스캔한 뒤" 작성한다(운영 정책,
+  // 2026-09-05 확정). 그 사실은 /log/enter가 심은 증표(hc_qr_pass)로
+  // 확인한다 — 세션·구성원·입원중 검사를 모두 통과한 뒤에 보므로 위의
+  // 401/403/400 의미는 그대로다. 북마크·직접 URL·API 직접 호출로는 이
+  // 지점을 지나지 못한다. 정정(PATCH)·사진·조회는 이 검사를 하지 않는다.
+  const qrPassCheck = checkQrPassAgainstCase(await readQrPass(), caseData.hospital_id);
+
+  if (!qrPassCheck.allowed) {
+    return NextResponse.json({ error: QR_PASS_REQUIRED_MESSAGE }, { status: 403 });
+  }
+
+  if (qrPassCheck.unbound) {
+    // 사례에 hospital_id가 없어 병원 결속 없이 허용한 경우. 구글 설문지
+    // 경로의 병원 매핑이 들어오면 사라져야 할 경고다. 사례 ID만 남긴다.
+    console.warn("QR pass 병원 결속 없이 간병일지 작성 허용(사례 hospital_id 없음):", caseId);
   }
 
   const today = getCareLogToday();

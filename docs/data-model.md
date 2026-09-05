@@ -524,14 +524,15 @@ RLS(`is_admin()`)를 그대로 통과해서 쓴다.
 | 경로 | 인증 | 비고 |
 | --- | --- | --- |
 | `GET /api/hospitals/lookup` | 없음(공개) | QR 토큰/코드로 병원 최소 정보 조회 |
+| `GET /log/enter` | 없음(공개) | **신규(2026-09-05)**. `q`(qr_token)를 `get_public_hospital_v2`로 재검증하고 활성 병원이면 QR 증표 쿠키 `hc_qr_pass`(HttpOnly, KST 자정·18h 중 빠른 만료)를 심은 뒤 허용 목적지(`/my-cases`, `/case-register`, `/case-join`)로 redirect. `h`(hospital_code)로는 발급하지 않음. `lib/qr-pass.ts`, `lib/qr-entry-next.ts` |
 | `POST /api/google-form-sync` | 시크릿 헤더 | `cases` upsert, service_role |
-| `POST /api/caregiver-auth/send-otp` | 없음(레이트리밋만) | |
+| `POST /api/caregiver-auth/send-otp` | 없음(레이트리밋만) | 본문에 `family_code`가 있으면(가족간병인 추가 화면) OTP 생성 전에 `lib/family-code.ts`로 검증 — 잘못된 코드로는 SMS·OTP 레코드가 생기지 않음. 요청자 기준 시도 제한은 `family_code_check_attempts` |
 | `POST /api/caregiver-auth/verify-otp` | 없음 | 성공 시 기존 caregiver면 즉시 세션 발급 |
 | `POST /api/caregiver-auth/logout` | 세션 쿠키 | |
 | `GET /api/caregiver-auth/session` | 세션 쿠키(소프트) | 로그인 여부만 반환 |
 | `POST /api/cases/register` | 세션 있으면 재사용, 없으면 OTP 소비 필요 | `register_case_v3`(간병인 주민등록번호 암호화 + 동의 6항목 포함) |
 | `POST /api/cases/join` | 〃 | `join_case_v2` |
-| `POST /api/cases/[id]/care-logs` | `requireCurrentCaregiverSession` | 하루 1건 제한(활성 행 기준) |
+| `POST /api/cases/[id]/care-logs` | `requireActiveCaseMemberSession` + QR 증표(`hc_qr_pass`) | 하루 1건 제한(활성 행 기준). **2026-09-05**: 증표가 없거나 다른 병원 것이면 403. `cases.hospital_id`가 있으면 증표의 병원과 일치해야 하고, null이면 유효 증표만 요구하고 서버 경고를 남김(B안). 정정 PATCH·사진·조회는 증표 불필요 |
 | `POST /api/cases/[id]/current-caregiver` | `requireCurrentCaregiverSession` | `set_current_caregiver_v2` |
 | `POST /api/cases/[id]/end-care` | `requireCurrentCaregiverSession` | 다른 활성 사례 없으면 세션 전체 폐기 |
 | `GET/POST /api/admin/hospitals`, `GET/PATCH /api/admin/hospitals/[id]`, `POST .../regenerate-qr` | `requireAdminApi` | |

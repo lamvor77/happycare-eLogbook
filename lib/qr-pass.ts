@@ -48,6 +48,52 @@ export interface QrPass {
 }
 
 /**
+ * 증표가 없거나 맞지 않을 때 사용자에게 보여줄 유일한 문구. 이유(없음·
+ * 만료·변조·다른 병원)를 구분해 알려주지 않는다 — 어느 경우든 할 일은
+ * 같다: 병원 QR을 다시 스캔한다.
+ */
+export const QR_PASS_REQUIRED_MESSAGE = "병원에 비치된 QR을 다시 스캔해 주세요.";
+
+export type QrPassCaseCheck =
+  /** 증표가 사례의 병원과 일치한다. */
+  | { allowed: true; unbound: false }
+  /** 사례에 hospital_id가 없어 병원 결속 없이 허용한다(호출부가 경고를 남긴다). */
+  | { allowed: true; unbound: true }
+  /** 증표가 없거나 다른 병원의 것이다. */
+  | { allowed: false };
+
+/**
+ * 검증된 증표를 특정 사례에 써도 되는지 판정한다(B안, 2026-09-05 확정).
+ *
+ *   - cases.hospital_id가 있으면 증표의 hospital_id와 반드시 같아야 한다.
+ *   - cases.hospital_id가 null이면(구글 설문지 경로로 들어온 사례 —
+ *     app/api/google-form-sync는 hospital_id를 채우지 않는다) 활성 병원의
+ *     유효한 증표이기만 하면 허용한다. 그 사례들을 작성 불가로 잠그지 않기
+ *     위해서다. 호출부는 이 경우를 반드시 경고 로그로 남긴다.
+ *
+ * 증표 자체의 유효성(서명·만료)은 verifyQrPassValue()가 이미 끝냈다고
+ * 가정한다 — null이 넘어오면 그 검증에 실패한 것이다.
+ */
+export function checkQrPassAgainstCase(
+  pass: QrPass | null,
+  caseHospitalId: string | null | undefined
+): QrPassCaseCheck {
+  if (!pass) {
+    return { allowed: false };
+  }
+
+  if (!caseHospitalId) {
+    return { allowed: true, unbound: true };
+  }
+
+  if (caseHospitalId.toLowerCase() !== pass.hospitalId) {
+    return { allowed: false };
+  }
+
+  return { allowed: true, unbound: false };
+}
+
+/**
  * KST 기준 다음 자정. getKstDayStart()가 "오늘 0시"를 절대 시각으로 주고,
  * KST는 서머타임이 없으므로 24시간을 더하면 정확히 내일 0시다.
  * 서버 시간대(Vercel은 UTC)에 의존하지 않는다.
