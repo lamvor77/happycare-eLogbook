@@ -6,6 +6,7 @@ import {
 } from "@/lib/case-caregivers";
 import ChangeCurrentCaregiver from "./ChangeCurrentCaregiver";
 import EndCareButton from "./EndCareButton";
+import FamilyCodeShare from "./FamilyCodeShare";
 import CaregiverLogoutButton from "@/app/my-cases/CaregiverLogoutButton";
 import CaseHistory from "./CaseHistory";
 import type { CaseCaregiver, CareLog } from "@/types/domain";
@@ -183,7 +184,9 @@ export default async function CaseDetailPage({
             <p>병원: {caseData.hospitals?.hospital_name || "-"}</p>
             <p>병원주소: {caseData.hospitals?.hospital_address || "-"}</p>
             <p>입원호실: {caseData.room_no || "-"}</p>
-            <p>가족코드: {caseData.family_code}</p>
+            {/* 가족코드는 다른 가족이 참여할 때 옮겨 적어야 하는 값이라
+                복사/공유를 바로 옆에 둔다(클라이언트 컴포넌트). */}
+            <FamilyCodeShare familyCode={caseData.family_code} />
           </div>
         </div>
 
