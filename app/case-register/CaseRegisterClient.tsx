@@ -717,20 +717,28 @@ export default function CaseRegisterClient() {
             입원호실
           </label>
           <input
-            className="w-full border p-3 rounded mb-3 min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
             value={roomNo}
             onChange={(e) => setRoomNo(e.target.value)}
+            aria-describedby="roomNo-help"
           />
+          <p id="roomNo-help" className="text-xs text-gray-700 mb-3">
+            📢 호실 미정 시 입력하지 않아도 됩니다.
+          </p>
 
           <label className="block text-sm font-bold text-gray-800 mb-1">
             간병개시 예정일
           </label>
           <input
-            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
             type="date"
             value={careStartDate}
             onChange={(e) => setCareStartDate(e.target.value)}
+            aria-describedby="careStartDate-help"
           />
+          <p id="careStartDate-help" className="text-xs text-gray-700">
+            📢 입원 일정에 따라 실제 간병개시일은 변경될 수 있습니다.
+          </p>
         </section>
 
         {/* 4. 환자 정보 */}
@@ -947,10 +955,17 @@ export default function CaseRegisterClient() {
             설계사 연락처
           </label>
           <input
-            className="w-full border p-3 rounded min-h-[44px] text-gray-900"
+            className="w-full border p-3 rounded mb-1 min-h-[44px] text-gray-900"
             value={plannerPhone}
             onChange={(e) => setPlannerPhone(e.target.value)}
+            aria-describedby="plannerPhone-help"
           />
+          {/* 설계사 알림톡은 기존 가족간병관리 시스템(Apps Script)이
+              접수·등록완료 시점에 보낸다. 연락처가 없으면 대상이 없어
+              발송되지 않으므로 "입력하면 안내된다"까지만 말한다. */}
+          <p id="plannerPhone-help" className="text-xs text-gray-700">
+            📢 연락처를 입력하시면 등록 내용이 알림톡으로 안내됩니다.
+          </p>
         </section>
 
         {/* 6. 확인 및 동의 */}
